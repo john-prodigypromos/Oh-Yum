@@ -20,7 +20,7 @@ export class Bolt {
   ) {
     this.sprite = scene.physics.add.sprite(x, y, textureKey);
     this.sprite.setRotation(angle + Math.PI / 2);
-    this.sprite.body!.setVelocity(
+    (this.sprite.body as Phaser.Physics.Arcade.Body).setVelocity(
       Math.cos(angle) * speed,
       Math.sin(angle) * speed,
     );
