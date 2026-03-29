@@ -6,7 +6,7 @@ import { DamageSystem } from '../systems/DamageSystem';
 import { HUDSystem } from '../systems/HUDSystem';
 import { RustyBehavior } from '../ai/behaviors/RustyBehavior';
 import { AIBehavior } from '../ai/AIBehavior';
-import { GAME_WIDTH, GAME_HEIGHT, SHIP, AI, COLORS } from '../config';
+import { GAME_WIDTH, GAME_HEIGHT, SHIP, AI, PHYSICS, COLORS } from '../config';
 import { createStarfieldTexture } from '../ui/Starfield';
 
 export class ArenaScene extends Phaser.Scene {
@@ -23,6 +23,7 @@ export class ArenaScene extends Phaser.Scene {
   private wasd!: { w: Phaser.Input.Keyboard.Key; a: Phaser.Input.Keyboard.Key; s: Phaser.Input.Keyboard.Key; d: Phaser.Input.Keyboard.Key };
 
   private score = 0;
+  private matchStartTime = 0;
   private matchOver = false;
 
   constructor() {
@@ -35,7 +36,6 @@ export class ArenaScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor(COLORS.arena);
 
-    // Border
     const border = this.add.graphics();
     border.lineStyle(1, COLORS.wall, 0.15);
     border.strokeRect(2, 2, GAME_WIDTH - 4, GAME_HEIGHT - 4);
@@ -86,49 +86,54 @@ export class ArenaScene extends Phaser.Scene {
     };
 
     this.score = 0;
+    this.matchStartTime = this.time.now;
     this.matchOver = false;
   }
 
   update(_time: number, delta: number): void {
     if (this.matchOver) return;
 
-    const now = Date.now();
+    const now = this.time.now; // Phaser scene time (pauses when tabbed away)
     const ships = [this.player, this.enemy];
 
-    // Player input
-    if (this.cursors.left.isDown || this.wasd.a.isDown) {
-      this.physicsSystem.applyRotation(this.player, -1);
-    }
-    if (this.cursors.right.isDown || this.wasd.d.isDown) {
-      this.physicsSystem.applyRotation(this.player, 1);
-    }
-    if (this.cursors.up.isDown || this.wasd.w.isDown) {
-      this.physicsSystem.applyThrust(this.player, 1);
-    }
+    // Player input — set on physics system, consumed inside fixed timestep
+    let rotateDir = 0;
+    let thrust = 0;
+    if (this.cursors.left.isDown || this.wasd.a.isDown) rotateDir = -1;
+    if (this.cursors.right.isDown || this.wasd.d.isDown) rotateDir = 1;
+    if (this.cursors.up.isDown || this.wasd.w.isDown) thrust = 1;
+    this.physicsSystem.setInput(this.player, { rotateDir, thrust });
+
     if (this.fireKey.isDown) {
-      this.weapons.fireBlaster(this, this.player, 'player');
+      this.weapons.fireBlaster(this, this.player, 'player', now);
     }
 
     // AI
-    this.aiBehavior.update(this.enemy, this.player, delta, this, this.weapons, this.physicsSystem);
+    this.aiBehavior.update(this.enemy, this.player, delta, this, this.weapons, this.physicsSystem, now);
 
-    // Physics
-    this.physicsSystem.update(delta, ships);
+    // Physics (returns wall hits for damage)
+    const { wallHits } = this.physicsSystem.update(delta, ships, now);
+    for (const ship of wallHits) {
+      if (!ship.isInvincible(now)) {
+        ship.applyDamage(PHYSICS.WALL_DAMAGE, false, now);
+      }
+    }
 
     // Bolt lifecycle
-    this.weapons.update();
+    this.weapons.update(now);
 
     // Damage: bolts vs ships
     const bolts = this.weapons.getBolts();
 
-    const enemyHits = this.damageSystem.checkBoltHits(bolts, this.enemy, 'enemy');
+    const enemyHits = this.damageSystem.checkBoltHits(bolts, this.enemy, 'enemy', now);
     for (const bolt of enemyHits) {
       this.damageSystem.applyBoltDamage(this.enemy, bolt, now);
-      this.score += 10;
+      const hullDamage = this.enemy.maxShield > 0 && this.enemy.shield >= bolt.damage ? 0 : bolt.damage;
+      this.score += hullDamage > 0 ? 10 : 0;
       bolt.destroy();
     }
 
-    const playerHits = this.damageSystem.checkBoltHits(bolts, this.player, 'player');
+    const playerHits = this.damageSystem.checkBoltHits(bolts, this.player, 'player', now);
     for (const bolt of playerHits) {
       this.damageSystem.applyBoltDamage(this.player, bolt, now);
       bolt.destroy();
@@ -142,29 +147,37 @@ export class ArenaScene extends Phaser.Scene {
     this.enemy.updateShieldRegen(now);
 
     // I-frame flicker
-    this.player.sprite.setAlpha(this.player.isInvincible ? (Math.sin(now * 0.02) > 0 ? 1 : 0.3) : 1);
-    this.enemy.sprite.setAlpha(this.enemy.isInvincible ? (Math.sin(now * 0.02) > 0 ? 1 : 0.3) : 1);
+    this.player.sprite.setAlpha(this.player.isInvincible(now) ? (Math.sin(now * 0.02) > 0 ? 1 : 0.3) : 1);
+    this.enemy.sprite.setAlpha(this.enemy.isInvincible(now) ? (Math.sin(now * 0.02) > 0 ? 1 : 0.3) : 1);
 
     // Win/Lose
     if (!this.enemy.alive) {
-      this.endMatch('win');
+      this.endMatch('win', now);
     } else if (!this.player.alive) {
-      this.endMatch('lose');
+      this.endMatch('lose', now);
     }
 
     // HUD
     this.hud.update(this.player, this.enemy, this.score);
   }
 
-  private endMatch(result: 'win' | 'lose'): void {
+  private endMatch(result: 'win' | 'lose', now: number): void {
     this.matchOver = true;
 
+    // Scoring bonuses on win
+    if (result === 'win') {
+      const elapsedSec = Math.floor((now - this.matchStartTime) / 1000);
+      const timeBonus = Math.max(0, 5000 - elapsedSec * 50);
+      const winBonus = 1000;
+      this.score += timeBonus + winBonus;
+    }
+
     const msg = result === 'win'
-      ? 'OPPONENT DESTROYED\nPress ENTER to continue'
+      ? `OPPONENT DESTROYED\nSCORE: ${this.score.toLocaleString()}\nPress ENTER to continue`
       : 'SHIP DESTROYED\nPress ENTER to retry';
 
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, msg, {
-      fontSize: '28px',
+      fontSize: '24px',
       fontFamily: '"Courier New", monospace',
       color: result === 'win' ? '#44ccaa' : '#ff6644',
       align: 'center',

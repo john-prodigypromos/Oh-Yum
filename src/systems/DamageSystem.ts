@@ -3,8 +3,8 @@ import { Bolt } from '../entities/Bolt';
 import { SHIP, PHYSICS } from '../config';
 
 export class DamageSystem {
-  checkBoltHits(bolts: Bolt[], target: Ship, targetOwner: 'player' | 'enemy'): Bolt[] {
-    if (!target.alive || target.isInvincible) return [];
+  checkBoltHits(bolts: Bolt[], target: Ship, targetOwner: 'player' | 'enemy', time: number): Bolt[] {
+    if (!target.alive || target.isInvincible(time)) return [];
 
     const hits: Bolt[] = [];
     const hitRadius = SHIP.HITBOX_RADIUS;
@@ -26,7 +26,7 @@ export class DamageSystem {
   }
 
   applyBoltDamage(target: Ship, bolt: Bolt, time: number): void {
-    if (target.isInvincible) return;
+    if (target.isInvincible(time)) return;
 
     target.applyDamage(bolt.damage, false, time);
     target.iframesUntil = time + SHIP.IFRAMES;
@@ -51,11 +51,11 @@ export class DamageSystem {
     const relSpeed = Math.sqrt(relVx * relVx + relVy * relVy);
     const damage = Math.max(1, Math.floor(relSpeed * PHYSICS.COLLISION_DAMAGE_MULTIPLIER));
 
-    if (!a.isInvincible) {
+    if (!a.isInvincible(time)) {
       a.applyDamage(damage, false, time);
       a.iframesUntil = time + SHIP.IFRAMES;
     }
-    if (!b.isInvincible) {
+    if (!b.isInvincible(time)) {
       b.applyDamage(damage, false, time);
       b.iframesUntil = time + SHIP.IFRAMES;
     }

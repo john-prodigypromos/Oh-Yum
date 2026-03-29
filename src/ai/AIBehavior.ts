@@ -11,5 +11,6 @@ export interface AIBehavior {
     scene: Phaser.Scene,
     weapons: WeaponSystem,
     physics: PhysicsSystem,
+    gameTime: number,
   ): void;
 }

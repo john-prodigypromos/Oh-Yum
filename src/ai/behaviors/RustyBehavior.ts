@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import { AIBehavior } from '../AIBehavior';
 import { Ship } from '../../entities/Ship';
 import { WeaponSystem } from '../../systems/WeaponSystem';
-import { PhysicsSystem } from '../../systems/PhysicsSystem';
+import { PhysicsSystem, InputState } from '../../systems/PhysicsSystem';
 import { AI } from '../../config';
 import { angleDiff } from '../../utils/math';
 
@@ -14,6 +14,7 @@ export class RustyBehavior implements AIBehavior {
     scene: Phaser.Scene,
     weapons: WeaponSystem,
     physics: PhysicsSystem,
+    gameTime: number,
   ): void {
     if (!ship.alive || !target.alive) return;
 
@@ -23,20 +24,23 @@ export class RustyBehavior implements AIBehavior {
     const dist = Math.sqrt(dx * dx + dy * dy);
 
     const diff = angleDiff(ship.rotation, angleToTarget);
+
+    // Set input for physics system (consumed inside fixed timestep)
+    const input: InputState = { rotateDir: 0, thrust: 0 };
+
     if (Math.abs(diff) > 0.05) {
-      physics.applyRotation(ship, Math.sign(diff));
+      input.rotateDir = Math.sign(diff);
     }
 
     if (Math.abs(diff) < 0.5 && dist > 100) {
-      physics.applyThrust(ship, 1);
+      input.thrust = 1;
     }
 
+    physics.setInput(ship, input);
+
+    // Fire when facing player
     if (Math.abs(diff) < 0.3 && dist < AI.RUSTY_CHASE_RANGE) {
-      const now = Date.now();
-      if (now - ship.lastFireTime >= AI.RUSTY_FIRE_RATE) {
-        ship.lastFireTime = now;
-        weapons.fireBlaster(scene, ship, 'enemy');
-      }
+      weapons.fireBlaster(scene, ship, 'enemy', gameTime, AI.RUSTY_FIRE_RATE);
     }
   }
 }

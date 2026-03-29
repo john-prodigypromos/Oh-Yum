@@ -6,11 +6,11 @@ import { WEAPONS, GAME_WIDTH, GAME_HEIGHT } from '../config';
 export class WeaponSystem {
   private bolts: Bolt[] = [];
 
-  fireBlaster(scene: Phaser.Scene, ship: Ship, owner: 'player' | 'enemy'): boolean {
-    const now = Date.now();
-    if (now - ship.lastFireTime < WEAPONS.BLASTER_FIRE_RATE) return false;
+  fireBlaster(scene: Phaser.Scene, ship: Ship, owner: 'player' | 'enemy', gameTime: number, fireRate?: number): boolean {
+    const rate = fireRate ?? WEAPONS.BLASTER_FIRE_RATE;
+    if (gameTime - ship.lastFireTime < rate) return false;
 
-    ship.lastFireTime = now;
+    ship.lastFireTime = gameTime;
     const textureKey = owner === 'player' ? 'bolt_player' : 'bolt_enemy';
 
     // Twin parallel bolts
@@ -34,6 +34,7 @@ export class WeaponSystem {
         owner,
         textureKey,
         WEAPONS.BLASTER_BOLT_LIFETIME,
+        gameTime,
       );
       this.bolts.push(bolt);
     }
@@ -41,10 +42,10 @@ export class WeaponSystem {
     return true;
   }
 
-  update(): void {
+  update(gameTime: number): void {
     for (let i = this.bolts.length - 1; i >= 0; i--) {
       const bolt = this.bolts[i];
-      if (!bolt.alive || bolt.isExpired() || bolt.isOutOfBounds(GAME_WIDTH, GAME_HEIGHT)) {
+      if (!bolt.alive || bolt.isExpired(gameTime) || bolt.isOutOfBounds(GAME_WIDTH, GAME_HEIGHT)) {
         bolt.destroy();
         this.bolts.splice(i, 1);
       }

@@ -17,6 +17,7 @@ export class Bolt {
     owner: 'player' | 'enemy',
     textureKey: string,
     lifetime: number,
+    gameTime: number,
   ) {
     this.sprite = scene.physics.add.sprite(x, y, textureKey);
     this.sprite.setRotation(angle + Math.PI / 2);
@@ -27,13 +28,13 @@ export class Bolt {
 
     this.damage = damage;
     this.owner = owner;
-    this.spawnTime = Date.now();
+    this.spawnTime = gameTime;
     this.lifetime = lifetime;
     this.alive = true;
   }
 
-  isExpired(): boolean {
-    return Date.now() - this.spawnTime > this.lifetime;
+  isExpired(gameTime: number): boolean {
+    return gameTime - this.spawnTime > this.lifetime;
   }
 
   isOutOfBounds(width: number, height: number): boolean {

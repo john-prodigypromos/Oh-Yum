@@ -49,8 +49,9 @@ export class Ship {
     this.lastFireTime = 0;
   }
 
-  get isInvincible(): boolean {
-    return Date.now() < this.iframesUntil;
+  /** Check invincibility — pass current game time (ms) */
+  isInvincible(time: number): boolean {
+    return time < this.iframesUntil;
   }
 
   applyDamage(amount: number, pierceShield: boolean, time: number): number {
@@ -74,7 +75,7 @@ export class Ship {
       this.alive = false;
     }
 
-    return amount;
+    return remaining;
   }
 
   updateShieldRegen(time: number): void {
