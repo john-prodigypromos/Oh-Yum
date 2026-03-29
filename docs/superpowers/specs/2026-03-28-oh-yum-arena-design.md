@@ -48,7 +48,10 @@ Hangar screen showing:
 
 ### Scoring
 
-- Points for damage dealt, pickups collected, time bonus for fast wins
+- **Damage points:** 10 points per damage dealt to enemy hull
+- **Pickup bonus:** 200 points per pickup collected
+- **Time bonus:** `max(0, 5000 - floor(elapsedSeconds) * 50)` — rewards fast wins, max 5000 for instant kill, 0 after 100 seconds
+- **Win bonus:** 1000 flat points per victory
 - Running total across the ladder
 - Per-opponent high score tracking
 - No currency or upgrade system — pure skill + pickup luck
@@ -61,15 +64,15 @@ Hangar screen showing:
 
 - Newtonian thrust: force applied in facing direction
 - Rotation: left/right at ~180°/sec
-- Light drag: 0.98 velocity dampening per frame (arcade, not simulation)
-- Max velocity cap
+- Light drag: time-based exponential decay (half-life ~1.5s). Applied per fixed physics step at 60Hz, independent of render frame rate.
+- Max velocity cap: 400 units/sec
 - Controls: WASD or arrow keys. Thrust = W/Up, Rotate = A/D or Left/Right, Fire = Space, Special Weapon = Shift
 
 ### Arena
 
 - Hard walls — bounce off with spark effect and minor hull damage
-- Roughly 1.5x screen width/height, camera fixed showing entire arena
-- Subtle border: faint grid lines or asteroid ring
+- Arena equals the viewport (1280x720). Camera is fixed, no scrolling or zoom. The entire fight is always visible.
+- Subtle border: faint grid lines or asteroid ring along the edges
 
 ### Collision
 
@@ -88,15 +91,15 @@ Hangar screen showing:
 
 ### Starting Loadout (every fight)
 
-**OH-YUM Blaster** — quad laser, unlimited ammo, moderate fire rate, red bolts.
+**OH-YUM Blaster** — fires 2 red bolts simultaneously (parallel, spaced ~8px apart from ship center), unlimited ammo, moderate fire rate (150ms between volleys).
 
 ### Pickup Weapons (timed spawn, limited ammo)
 
 | Weapon | Behavior | Ammo | Visual |
 |--------|----------|------|--------|
-| OH-YUM Homing Missiles | Lock-on, tracks target | 4 | Orange smoke trail |
+| OH-YUM Homing Missiles | Auto-locks nearest enemy (or Warden over drones), tracks with turn rate | 4 | Orange smoke trail |
 | OH-YUM Scatter Shot | Wide 5-bolt spread, short range | 8 | Red bolt fan |
-| OH-YUM Plasma Lance | Powerful single beam, pierces shields | 2 | Bright cyan beam |
+| OH-YUM Plasma Lance | Powerful single bolt (large, fast), bypasses shields dealing hull damage directly | 2 | Bright cyan oversized bolt with glow trail |
 | OH-YUM Bomb | Screen-clearing shockwave | 1 | Expanding white ring |
 
 ### Defensive Pickup
@@ -109,6 +112,16 @@ Hangar screen showing:
 - Floating crate with a glow — fly through to collect
 - Only one special weapon held at a time (replaces previous)
 - HUD shows current special + ammo count
+
+### Damage Pipeline
+
+1. Incoming damage hits **shields first**. Shield absorbs up to its remaining value.
+2. Any overflow damage passes through to **hull**.
+3. If shields are at 0, all damage goes directly to hull.
+4. **OH-YUM Plasma Lance** bypasses shields entirely — all damage applied to hull.
+5. Shields regenerate at `SHIELD_REGEN_RATE` per second after `SHIELD_REGEN_DELAY` ms of not taking damage.
+6. Hull does not regenerate.
+7. All AI opponents have shields and hull. Per-opponent values defined in the stat table below.
 
 ---
 
@@ -149,6 +162,43 @@ Hangar screen showing:
     - Phase 3 (20% hull): Berserk — rapid-fire + homing missiles simultaneously.
     - Defeat → Cybertruck unlocked.
 
+### Opponent Stats
+
+Player reference: Hull 100, Shield 50, Speed 1.0x, Rotation 1.0x, Aim accuracy ~70%
+
+| # | Name | Hull | Shield | Speed | Rotation | Aim | Notes |
+|---|------|------|--------|-------|----------|-----|-------|
+| 1 | Rusty | 60 | 0 | 0.5x | 0.5x | 20% | No shield, slow |
+| 2 | Flicker | 60 | 10 | 0.8x | 1.2x | 25% | Erratic movement |
+| 3 | Needles | 40 | 20 | 1.3x | 1.0x | 35% | Glass cannon |
+| 4 | Brickwall | 140 | 30 | 0.4x | 0.4x | 40% | Tank |
+| 5 | Viper | 80 | 30 | 1.0x | 1.0x | 50% | Balanced |
+| 6 | Sideswipe | 120 | 20 | 1.1x | 0.8x | 40% | High collision dmg (2x) |
+| 7 | Ghost | 70 | 40 | 1.2x | 1.3x | 50% | Evasive |
+| 8 | Barrage | 80 | 30 | 0.9x | 0.9x | 55% | Burst fire pattern |
+| 9 | Sigma-7 | 80 | 40 | 0.8x | 0.8x | 75% | Sniper |
+| 10 | Havoc | 90 | 30 | 1.0x | 1.0x | 50% | Uses bombs |
+| 11 | Mirage | 75 | 45 | 1.1x | 1.2x | 60% | Flanker |
+| 12 | Ironclad | 120 | 70 | 0.7x | 0.6x | 55% | Shield tank |
+| 13 | Eclipse | 90 | 50 | 1.2x | 1.3x | 80% | Aggressive |
+| 14 | Nemesis | 100 | 50 | 1.0x | 1.0x | 70% | Adapts mid-fight |
+| 15 | Void | 100 | 60 | 1.1x | 1.1x | 75% | Positional |
+| 16 | The Warden | 200 | 80 | 1.0x | 1.0x | 70% | Multi-phase boss |
+
+Speed/Rotation are multipliers relative to player values. Aim is probability of leading shots correctly.
+
+### The Warden — Drone Specification
+
+Phase 2 (triggered at 50% hull) deploys **2 drone wingmen**:
+- Hull: 25 (no shield)
+- Speed: 1.3x player (fast, harassment role)
+- Weapon: single weak blaster (damage 3, fire rate 300ms)
+- AI: simple chase-and-fire, no pickup seeking, no evasion
+- Do not respawn if destroyed
+- Destroying drones is not required to reach Phase 3 — The Warden transitions at 20% hull regardless
+- Drones do not drop pickups
+- Drones use a smaller, simpler ship design (wedge shape)
+
 ### AI Architecture
 
 Each opponent has a behavior tree with weighted states:
@@ -187,6 +237,48 @@ The player is a pilot from Utah, USA, Earth, Milky Way Galaxy. The OH-YUM Arena 
 
 ---
 
+## Audio
+
+### Music Tracks (5 total)
+
+| Track | Where | Mood |
+|-------|-------|------|
+| Title Theme | TitleScene | Epic, orchestral, OH-YUM fanfare |
+| Hangar Ambience | HangarScene | Calm, mechanical hum, radio chatter |
+| Arena Combat | ArenaScene (rounds 1-15) | Intense, driving, uptempo |
+| Warden Theme | ArenaScene (round 16) | Dark, ominous, escalating per phase |
+| Victory Fanfare | VictoryScene | Triumphant, emotional, celebratory |
+
+### Sound Effects
+
+| SFX | Trigger |
+|-----|---------|
+| Blaster fire | OH-YUM Blaster shoots |
+| Missile launch | Homing missile fires |
+| Missile lock | Lock-on acquired tone |
+| Scatter fire | Scatter shot fires |
+| Plasma fire | Plasma lance fires (heavier) |
+| Bomb deploy | Bomb placed |
+| Bomb shockwave | Bomb detonates |
+| Bolt impact | Bolt hits shield or hull |
+| Shield hit | Damage absorbed by shield (higher pitch) |
+| Hull hit | Damage to hull (crunch) |
+| Shield down | Shield depleted warning |
+| Explosion small | Minor ship damage |
+| Explosion large | Ship destroyed |
+| Pickup collect | Fly through crate |
+| Pickup spawn | Crate materializes |
+| Wall bounce | Ship hits arena wall |
+| Thruster loop | Continuous while thrusting |
+| Menu select | UI navigation |
+| Round start | Fight begins countdown |
+| Round win | Opponent destroyed |
+| Round lose | Player destroyed |
+
+Use royalty-free assets from itch.io, OpenGameArt, or Freesound. Placeholder silence is acceptable during development.
+
+---
+
 ## Technical Architecture
 
 ### Rendering (Hybrid Approach)
@@ -195,6 +287,7 @@ The player is a pilot from Utah, USA, Earth, Milky Way Galaxy. The OH-YUM Arena 
 2. Each ship rendered at 72 rotation angles (5° increments) × damage variants → output as Phaser sprite sheets
 3. Runtime: Phaser sprites for ships, Phaser particle emitters for thrusters/bolts/explosions/pickups
 4. Starfield + nebula rendered once to a static background texture
+5. Sprite sheets cached in IndexedDB after first generation — subsequent boots skip rendering and load from cache. Cache invalidated by a version hash in ShipDefinitions.
 
 ### Scene Graph
 
@@ -316,9 +409,10 @@ export const GAME_WIDTH = 1280;
 export const GAME_HEIGHT = 720;
 
 export const PHYSICS = {
+  FIXED_TIMESTEP: 1000 / 60,       // 60Hz physics step, independent of render FPS
   THRUST: 300,
   ROTATION_SPEED: Math.PI,          // ~180°/sec
-  DRAG: 0.98,
+  DRAG_HALF_LIFE: 1.5,             // seconds — velocity halves every 1.5s without thrust
   MAX_VELOCITY: 400,
   WALL_BOUNCE_FACTOR: 0.6,
   WALL_DAMAGE: 2,
