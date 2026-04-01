@@ -458,16 +458,16 @@ function drawChinGuns(ctx: CanvasRenderingContext2D): void {
     ctx.arc(xOff, -34, 1.8, 0, Math.PI * 2);
     ctx.fill();
 
-    // Muzzle glow indicator
-    ctx.fillStyle = 'rgba(255,80,40,0.3)';
+    // Muzzle glow indicator (red to match enemy bolts)
+    ctx.fillStyle = 'rgba(255,50,34,0.4)';
     ctx.beginPath();
     ctx.arc(xOff, -34.5, 1.2, 0, Math.PI * 2);
     ctx.fill();
 
     // Muzzle glow halo
     const muzzleGlow = ctx.createRadialGradient(xOff, -34, 0, xOff, -34, 4);
-    muzzleGlow.addColorStop(0, 'rgba(255,80,40,0.12)');
-    muzzleGlow.addColorStop(1, 'rgba(255,80,40,0)');
+    muzzleGlow.addColorStop(0, 'rgba(255,50,34,0.15)');
+    muzzleGlow.addColorStop(1, 'rgba(255,50,34,0)');
     ctx.fillStyle = muzzleGlow;
     ctx.beginPath();
     ctx.arc(xOff, -34, 4, 0, Math.PI * 2);

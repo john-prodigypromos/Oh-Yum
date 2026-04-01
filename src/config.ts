@@ -46,11 +46,11 @@ export const AI = {
 export const COLORS = {
   player: 0x88aacc,
   enemy: 0xcc4444,
-  playerBolt: 0xff3322,
-  enemyBolt: 0x22cc44,
+  playerBolt: 0x00ddff,
+  enemyBolt: 0xff3322,
   pickup: 0xffaa22,
-  shield: 0x3399dd,
-  hull: 0xccbb88,
+  shield: 0x00ccff,
+  hull: 0x44ff44,
   arena: 0x0a1220,
   wall: 0x334455,
 } as const;

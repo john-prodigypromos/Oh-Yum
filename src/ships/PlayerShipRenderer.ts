@@ -499,16 +499,16 @@ function drawLaserCannons(ctx: CanvasRenderingContext2D): void {
     ctx.arc(pos.x, pos.y - 18, 1.2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Muzzle glow indicator
-    ctx.fillStyle = 'rgba(255,60,30,0.35)';
+    // Muzzle glow indicator (cyan to match player bolts)
+    ctx.fillStyle = 'rgba(0,221,255,0.45)';
     ctx.beginPath();
     ctx.arc(pos.x, pos.y - 18, 1.8, 0, Math.PI * 2);
     ctx.fill();
 
     // Muzzle glow halo
     const muzzleGlow = ctx.createRadialGradient(pos.x, pos.y - 18, 0, pos.x, pos.y - 18, 4);
-    muzzleGlow.addColorStop(0, 'rgba(255,60,30,0.15)');
-    muzzleGlow.addColorStop(1, 'rgba(255,60,30,0)');
+    muzzleGlow.addColorStop(0, 'rgba(0,221,255,0.2)');
+    muzzleGlow.addColorStop(1, 'rgba(0,221,255,0)');
     ctx.fillStyle = muzzleGlow;
     ctx.beginPath();
     ctx.arc(pos.x, pos.y - 18, 4, 0, Math.PI * 2);

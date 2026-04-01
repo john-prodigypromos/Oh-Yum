@@ -6,9 +6,11 @@ import { DamageSystem } from '../systems/DamageSystem';
 import { HUDSystem } from '../systems/HUDSystem';
 import { RustyBehavior } from '../ai/behaviors/RustyBehavior';
 import { AIBehavior } from '../ai/AIBehavior';
-import { GAME_WIDTH, GAME_HEIGHT, SHIP, AI, PHYSICS, COLORS } from '../config';
+import { GAME_WIDTH, GAME_HEIGHT, SHIP, PHYSICS, COLORS } from '../config';
+import { currentDifficulty, DIFFICULTY } from '../state/Difficulty';
 import { createStarfieldTexture } from '../ui/Starfield';
 import { TouchControls } from '../ui/TouchControls';
+import { SoundSystem } from '../systems/SoundSystem';
 
 export class ArenaScene extends Phaser.Scene {
   private player!: Ship;
@@ -19,6 +21,7 @@ export class ArenaScene extends Phaser.Scene {
   private hud!: HUDSystem;
   private aiBehavior!: AIBehavior;
   private touchControls!: TouchControls;
+  private sound_sys!: SoundSystem;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private fireKey!: Phaser.Input.Keyboard.Key;
@@ -47,10 +50,13 @@ export class ArenaScene extends Phaser.Scene {
     this.weapons = new WeaponSystem();
     this.damageSystem = new DamageSystem();
 
+    // Difficulty settings
+    const diff = DIFFICULTY[currentDifficulty];
+
     // Player
     const playerConfig: ShipConfig = {
-      hull: SHIP.PLAYER_HULL,
-      shield: SHIP.PLAYER_SHIELD,
+      hull: diff.playerHull,
+      shield: diff.playerShield,
       speedMult: 1,
       rotationMult: 1,
       textureKey: 'ship_player',
@@ -59,17 +65,38 @@ export class ArenaScene extends Phaser.Scene {
     this.player = new Ship(this, GAME_WIDTH * 0.3, GAME_HEIGHT * 0.7, playerConfig);
     this.player.rotation = -Math.PI / 2;
 
-    // Enemy (Rusty)
+    // Enemy (Rusty) — scaled by difficulty
     const enemyConfig: ShipConfig = {
-      hull: AI.RUSTY_HULL,
-      shield: AI.RUSTY_SHIELD,
-      speedMult: AI.RUSTY_SPEED_MULT,
-      rotationMult: AI.RUSTY_ROTATION_MULT,
+      hull: diff.enemyHull,
+      shield: diff.enemyShield,
+      speedMult: diff.enemySpeedMult,
+      rotationMult: diff.enemyRotationMult,
       textureKey: 'ship_enemy',
       hitboxRadius: SHIP.HITBOX_RADIUS,
     };
     this.enemy = new Ship(this, GAME_WIDTH * 0.7, GAME_HEIGHT * 0.3, enemyConfig);
     this.enemy.rotation = Math.PI / 2;
+
+    // Damage smoke emitters
+    this.player.smokeEmitter = this.add.particles(0, 0, 'particle_smoke', {
+      speed: { min: 10, max: 40 },
+      scale: { start: 0.6, end: 0 },
+      alpha: { start: 0.5, end: 0 },
+      lifespan: { min: 300, max: 800 },
+      tint: [0xff6600, 0x444444, 0x222222],
+      emitting: false,
+    });
+    this.player.smokeEmitter.setDepth(45);
+
+    this.enemy.smokeEmitter = this.add.particles(0, 0, 'particle_smoke', {
+      speed: { min: 10, max: 40 },
+      scale: { start: 0.6, end: 0 },
+      alpha: { start: 0.5, end: 0 },
+      lifespan: { min: 300, max: 800 },
+      tint: [0xff6600, 0x444444, 0x222222],
+      emitting: false,
+    });
+    this.enemy.smokeEmitter.setDepth(45);
 
     // AI
     this.aiBehavior = new RustyBehavior();
@@ -89,6 +116,11 @@ export class ArenaScene extends Phaser.Scene {
 
     // Touch controls (auto-detected)
     this.touchControls = new TouchControls(this);
+
+    // Sound system (init on first user interaction)
+    this.sound_sys = new SoundSystem();
+    this.input.once('pointerdown', () => this.sound_sys.init());
+    this.input.keyboard!.once('keydown', () => this.sound_sys.init());
 
     this.score = 0;
     this.matchStartTime = this.time.now;
@@ -121,58 +153,86 @@ export class ArenaScene extends Phaser.Scene {
     this.physicsSystem.setInput(this.player, { rotateDir, thrust });
 
     if (fire) {
-      this.weapons.fireBlaster(this, this.player, 'player', now);
+      const fired = this.weapons.fireBlaster(this, this.player, 'player', now);
+      if (fired) this.sound_sys.playerShoot();
+    }
+
+    // Engine thrust sound
+    if (thrust > 0) {
+      this.sound_sys.startThrust();
+    } else {
+      this.sound_sys.stopThrust();
     }
 
     // Draw touch controls overlay
     this.touchControls.draw();
 
-    // AI
+    // AI (track bolt count to detect enemy firing)
+    const boltsBefore = this.weapons.getBolts().length;
     this.aiBehavior.update(this.enemy, this.player, delta, this, this.weapons, this.physicsSystem, now);
+    if (this.weapons.getBolts().length > boltsBefore) {
+      this.sound_sys.enemyShoot();
+    }
 
     // Physics (returns wall hits for damage)
     const { wallHits } = this.physicsSystem.update(delta, ships, now);
     for (const ship of wallHits) {
       if (!ship.isInvincible(now)) {
         ship.applyDamage(PHYSICS.WALL_DAMAGE, false, now);
+        this.sound_sys.wallBounce();
       }
     }
 
     // Bolt lifecycle
-    this.weapons.update(now);
+    this.weapons.update(now, delta);
 
     // Damage: bolts vs ships
     const bolts = this.weapons.getBolts();
 
     const enemyHits = this.damageSystem.checkBoltHits(bolts, this.enemy, 'enemy', now);
     for (const bolt of enemyHits) {
+      const hadShield = this.enemy.shield > 0;
       this.damageSystem.applyBoltDamage(this.enemy, bolt, now);
-      const hullDamage = this.enemy.maxShield > 0 && this.enemy.shield >= bolt.damage ? 0 : bolt.damage;
+      const hullDamage = hadShield && this.enemy.shield >= 0 ? 0 : bolt.damage;
       this.score += hullDamage > 0 ? 10 : 0;
+      hadShield && this.enemy.shield > 0 ? this.sound_sys.shieldHit() : this.sound_sys.hullHit();
       bolt.destroy();
     }
 
     const playerHits = this.damageSystem.checkBoltHits(bolts, this.player, 'player', now);
     for (const bolt of playerHits) {
+      const hadShield = this.player.shield > 0;
       this.damageSystem.applyBoltDamage(this.player, bolt, now);
+      hadShield && this.player.shield > 0 ? this.sound_sys.shieldHit() : this.sound_sys.hullHit();
       bolt.destroy();
     }
 
     // Ship collision
-    this.damageSystem.checkShipCollision(this.player, this.enemy, now);
+    const collided = this.damageSystem.checkShipCollision(this.player, this.enemy, now);
+    if (collided) this.sound_sys.shipCollision();
 
     // Shield regen
     this.player.updateShieldRegen(now);
     this.enemy.updateShieldRegen(now);
 
-    // I-frame flicker
+    // Damage visuals (tint, warp, smoke)
+    this.player.updateDamageVisuals(now);
+    this.enemy.updateDamageVisuals(now);
+
+    // I-frame flicker (alpha only — damage tint applied above)
     this.player.sprite.setAlpha(this.player.isInvincible(now) ? (Math.sin(now * 0.02) > 0 ? 1 : 0.3) : 1);
     this.enemy.sprite.setAlpha(this.enemy.isInvincible(now) ? (Math.sin(now * 0.02) > 0 ? 1 : 0.3) : 1);
 
     // Win/Lose
     if (!this.enemy.alive) {
+      this.spawnExplosion(this.enemy.sprite.x, this.enemy.sprite.y);
+      this.sound_sys.explosion();
+      this.sound_sys.stopThrust();
       this.endMatch('win', now);
     } else if (!this.player.alive) {
+      this.spawnExplosion(this.player.sprite.x, this.player.sprite.y);
+      this.sound_sys.explosion();
+      this.sound_sys.stopThrust();
       this.endMatch('lose', now);
     }
 
@@ -180,8 +240,33 @@ export class ArenaScene extends Phaser.Scene {
     this.hud.update(this.player, this.enemy, this.score);
   }
 
+  private spawnExplosion(x: number, y: number): void {
+    const emitter = this.add.particles(x, y, 'particle_explosion', {
+      speed: { min: 80, max: 350 },
+      scale: { start: 1.8, end: 0 },
+      alpha: { start: 1, end: 0 },
+      lifespan: { min: 400, max: 1200 },
+      quantity: 60,
+      tint: [0xff3300, 0xff8800, 0xffcc00, 0xffffff],
+      emitting: false,
+    });
+    emitter.setDepth(150);
+    emitter.explode();
+
+    // Screen shake for impact
+    this.cameras.main.shake(400, 0.02);
+
+    // Clean up after particles finish
+    this.time.delayedCall(1500, () => emitter.destroy());
+  }
+
   private endMatch(result: 'win' | 'lose', now: number): void {
     this.matchOver = true;
+
+    // Victory/defeat jingle (delayed slightly so explosion plays first)
+    this.time.delayedCall(600, () => {
+      result === 'win' ? this.sound_sys.victory() : this.sound_sys.defeat();
+    });
 
     // Scoring bonuses on win
     if (result === 'win') {
@@ -191,29 +276,63 @@ export class ArenaScene extends Phaser.Scene {
       this.score += timeBonus + winBonus;
     }
 
-    const msg = result === 'win'
-      ? `OPPONENT DESTROYED\nSCORE: ${this.score.toLocaleString()}\nPress ENTER to continue`
-      : 'SHIP DESTROYED\nPress ENTER to retry';
+    // Full-screen banner
+    const bannerBg = this.add.graphics();
+    bannerBg.setDepth(199);
+    bannerBg.fillStyle(0x000000, 0.7);
+    bannerBg.fillRect(0, GAME_HEIGHT / 2 - 90, GAME_WIDTH, 180);
 
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2, msg, {
-      fontSize: '24px',
-      fontFamily: '"Courier New", monospace',
-      color: result === 'win' ? '#44ccaa' : '#ff6644',
+    const bannerColor = result === 'win' ? 0x00ff66 : 0xff2200;
+    bannerBg.lineStyle(3, bannerColor, 1);
+    bannerBg.lineBetween(0, GAME_HEIGHT / 2 - 90, GAME_WIDTH, GAME_HEIGHT / 2 - 90);
+    bannerBg.lineBetween(0, GAME_HEIGHT / 2 + 90, GAME_WIDTH, GAME_HEIGHT / 2 + 90);
+
+    const headline = result === 'win'
+      ? 'YOU WON!\nHUMANITY HAS BEEN SAVED!'
+      : 'YOU LOST!\nPLEASE DO NOT LET THE\nHUMAN RACE DOWN AGAIN!';
+
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 30, headline, {
+      fontSize: '28px',
+      fontFamily: 'Arial, sans-serif',
+      fontStyle: 'bold',
+      color: result === 'win' ? '#00ff66' : '#ff4444',
       align: 'center',
-    }).setOrigin(0.5).setDepth(200);
+      stroke: '#000000',
+      strokeThickness: 3,
+    }).setOrigin(0.5, 0.5).setDepth(200);
 
-    // Restart on ENTER key or screen tap
-    this.input.keyboard!.once('keydown-ENTER', () => {
+    const subline = result === 'win'
+      ? `SCORE: ${this.score.toLocaleString()}`
+      : '';
+
+    if (subline) {
+      this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 20, subline, {
+        fontSize: '20px',
+        fontFamily: 'Arial, sans-serif',
+        fontStyle: 'bold',
+        color: '#ffff00',
+        align: 'center',
+        stroke: '#000000',
+        strokeThickness: 2,
+      }).setOrigin(0.5, 0.5).setDepth(200);
+    }
+
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 60, 'Press ENTER for menu', {
+      fontSize: '14px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#ffffff',
+      align: 'center',
+    }).setOrigin(0.5, 0.5).setDepth(200);
+
+    // Return to title on ENTER or tap
+    const goToTitle = () => {
       this.weapons.clear();
       this.hud.destroy();
       this.touchControls.destroy();
-      this.scene.restart();
-    });
-    this.input.once('pointerdown', () => {
-      this.weapons.clear();
-      this.hud.destroy();
-      this.touchControls.destroy();
-      this.scene.restart();
-    });
+      this.sound_sys.stopThrust();
+      this.scene.start('Title');
+    };
+    this.input.keyboard!.once('keydown-ENTER', goToTitle);
+    this.input.once('pointerdown', goToTitle);
   }
 }

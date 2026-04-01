@@ -1,0 +1,58 @@
+// ── Difficulty presets ───────────────────────────────────
+
+export type DifficultyLevel = 'beginner' | 'intermediate' | 'expert';
+
+export interface DifficultyConfig {
+  label: string;
+  playerHull: number;
+  playerShield: number;
+  enemyHull: number;
+  enemyShield: number;
+  enemySpeedMult: number;
+  enemyRotationMult: number;
+  enemyFireRate: number;
+  enemyChaseRange: number;
+}
+
+export const DIFFICULTY: Record<DifficultyLevel, DifficultyConfig> = {
+  beginner: {
+    label: 'BEGINNER',
+    playerHull: 150,
+    playerShield: 80,
+    enemyHull: 40,
+    enemyShield: 0,
+    enemySpeedMult: 0.3,
+    enemyRotationMult: 0.3,
+    enemyFireRate: 1200,
+    enemyChaseRange: 350,
+  },
+  intermediate: {
+    label: 'INTERMEDIATE',
+    playerHull: 100,
+    playerShield: 50,
+    enemyHull: 60,
+    enemyShield: 0,
+    enemySpeedMult: 0.5,
+    enemyRotationMult: 0.5,
+    enemyFireRate: 800,
+    enemyChaseRange: 500,
+  },
+  expert: {
+    label: 'EXPERT',
+    playerHull: 80,
+    playerShield: 30,
+    enemyHull: 100,
+    enemyShield: 20,
+    enemySpeedMult: 0.8,
+    enemyRotationMult: 0.8,
+    enemyFireRate: 400,
+    enemyChaseRange: 700,
+  },
+};
+
+/** Global mutable selection — set by TitleScene, read by ArenaScene */
+export let currentDifficulty: DifficultyLevel = 'intermediate';
+
+export function setDifficulty(level: DifficultyLevel): void {
+  currentDifficulty = level;
+}

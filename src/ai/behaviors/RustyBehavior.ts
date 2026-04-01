@@ -3,8 +3,8 @@ import { AIBehavior } from '../AIBehavior';
 import { Ship } from '../../entities/Ship';
 import { WeaponSystem } from '../../systems/WeaponSystem';
 import { PhysicsSystem, InputState } from '../../systems/PhysicsSystem';
-import { AI } from '../../config';
 import { angleDiff } from '../../utils/math';
+import { currentDifficulty, DIFFICULTY } from '../../state/Difficulty';
 
 export class RustyBehavior implements AIBehavior {
   update(
@@ -38,9 +38,10 @@ export class RustyBehavior implements AIBehavior {
 
     physics.setInput(ship, input);
 
-    // Fire when facing player
-    if (Math.abs(diff) < 0.3 && dist < AI.RUSTY_CHASE_RANGE) {
-      weapons.fireBlaster(scene, ship, 'enemy', gameTime, AI.RUSTY_FIRE_RATE);
+    // Fire when facing player — rate and range from difficulty
+    const diffCfg = DIFFICULTY[currentDifficulty];
+    if (Math.abs(diff) < 0.3 && dist < diffCfg.enemyChaseRange) {
+      weapons.fireBlaster(scene, ship, 'enemy', gameTime, diffCfg.enemyFireRate);
     }
   }
 }

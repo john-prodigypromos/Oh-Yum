@@ -26,6 +26,7 @@ export class Ship {
   lastDamageTime: number;
   alive: boolean;
   lastFireTime: number;
+  smokeEmitter: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
   constructor(scene: Phaser.Scene, x: number, y: number, config: ShipConfig) {
     this.sprite = scene.physics.add.sprite(x, y, config.textureKey, 0);
@@ -86,6 +87,61 @@ export class Ship {
     }
 
     return remaining;
+  }
+
+  /** Returns 0 (full health) to 1 (dead) */
+  get damagePct(): number {
+    return 1 - (this.hull / this.maxHull);
+  }
+
+  /**
+   * Apply progressive visual damage:
+   * - Tint shifts from white → orange → red as hull drops
+   * - Scale gets slightly warped/uneven (looks "bent")
+   * - Smoke particles at low hull
+   */
+  updateDamageVisuals(time: number): void {
+    const dmg = this.damagePct;
+
+    // ── Tint: white → orange → red ──
+    if (dmg < 0.2) {
+      this.sprite.clearTint();
+    } else if (dmg < 0.5) {
+      // Light orange tint
+      this.sprite.setTint(0xffcc88);
+    } else if (dmg < 0.75) {
+      // Orange tint
+      this.sprite.setTint(0xff8844);
+    } else {
+      // Red tint, flickering
+      const flicker = Math.sin(time * 0.01) > 0 ? 0xff4422 : 0xff6633;
+      this.sprite.setTint(flicker);
+    }
+
+    // ── Scale warp: ship looks bent/deformed at high damage ──
+    if (dmg < 0.3) {
+      this.sprite.setScale(1, 1);
+    } else {
+      // Asymmetric scale — one axis shrinks slightly, wobbles
+      const wobble = Math.sin(time * 0.005) * dmg * 0.08;
+      const shrink = 1 - dmg * 0.15;
+      this.sprite.setScale(shrink + wobble, shrink - wobble);
+    }
+
+    // ── Smoke particles at < 50% hull ──
+    if (this.smokeEmitter) {
+      if (dmg > 0.5) {
+        this.smokeEmitter.setPosition(this.sprite.x, this.sprite.y);
+        this.smokeEmitter.setFrequency(dmg > 0.75 ? 30 : 80);
+        if (!this.smokeEmitter.emitting) {
+          this.smokeEmitter.start();
+        }
+      } else {
+        if (this.smokeEmitter.emitting) {
+          this.smokeEmitter.stop();
+        }
+      }
+    }
   }
 
   updateShieldRegen(time: number): void {

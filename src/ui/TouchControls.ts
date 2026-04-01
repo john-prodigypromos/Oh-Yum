@@ -18,15 +18,15 @@ export class TouchControls {
 
   // Joystick state
   private joystickCenter: { x: number; y: number };
-  private joystickRadius = 50;
-  private joystickOuterRadius = 70;
+  private joystickRadius = 70;
+  private joystickOuterRadius = 100;
   private joystickPointer: Phaser.Input.Pointer | null = null;
   private joystickAngle = 0;
   private joystickDistance = 0;
 
   // Fire button state
   private fireCenter: { x: number; y: number };
-  private fireRadius = 40;
+  private fireRadius = 60;
   private firePressed = false;
 
   constructor(scene: Phaser.Scene) {
@@ -35,8 +35,8 @@ export class TouchControls {
     this.enabled = scene.sys.game.device.input.touch;
 
     // Position: joystick bottom-left, fire button bottom-right
-    this.joystickCenter = { x: 120, y: GAME_HEIGHT - 120 };
-    this.fireCenter = { x: GAME_WIDTH - 100, y: GAME_HEIGHT - 120 };
+    this.joystickCenter = { x: 140, y: GAME_HEIGHT - 140 };
+    this.fireCenter = { x: GAME_WIDTH - 120, y: GAME_HEIGHT - 140 };
 
     if (this.enabled) {
       this.setupTouchListeners();
@@ -137,13 +137,13 @@ export class TouchControls {
       const thumbX = this.joystickCenter.x + Math.cos(this.joystickAngle) * this.joystickDistance;
       const thumbY = this.joystickCenter.y + Math.sin(this.joystickAngle) * this.joystickDistance;
       this.graphics.fillStyle(0x88aacc, 0.4);
-      this.graphics.fillCircle(thumbX, thumbY, 18);
-      this.graphics.lineStyle(1.5, 0x88aacc, 0.5);
-      this.graphics.strokeCircle(thumbX, thumbY, 18);
+      this.graphics.fillCircle(thumbX, thumbY, 26);
+      this.graphics.lineStyle(2, 0x88aacc, 0.5);
+      this.graphics.strokeCircle(thumbX, thumbY, 26);
     } else {
       // Resting position
       this.graphics.fillStyle(0x88aacc, 0.2);
-      this.graphics.fillCircle(this.joystickCenter.x, this.joystickCenter.y, 18);
+      this.graphics.fillCircle(this.joystickCenter.x, this.joystickCenter.y, 26);
     }
 
     // Direction labels
@@ -163,14 +163,14 @@ export class TouchControls {
     this.drawLabel('FIRE', this.fireCenter.x, this.fireCenter.y - this.fireRadius - 14);
 
     // Crosshair inside fire button
-    this.graphics.lineStyle(1.5, fireColor, 0.4);
+    this.graphics.lineStyle(2, fireColor, 0.4);
     this.graphics.beginPath();
-    this.graphics.moveTo(this.fireCenter.x - 12, this.fireCenter.y);
-    this.graphics.lineTo(this.fireCenter.x + 12, this.fireCenter.y);
+    this.graphics.moveTo(this.fireCenter.x - 18, this.fireCenter.y);
+    this.graphics.lineTo(this.fireCenter.x + 18, this.fireCenter.y);
     this.graphics.strokePath();
     this.graphics.beginPath();
-    this.graphics.moveTo(this.fireCenter.x, this.fireCenter.y - 12);
-    this.graphics.lineTo(this.fireCenter.x, this.fireCenter.y + 12);
+    this.graphics.moveTo(this.fireCenter.x, this.fireCenter.y - 18);
+    this.graphics.lineTo(this.fireCenter.x, this.fireCenter.y + 18);
     this.graphics.strokePath();
   }
 

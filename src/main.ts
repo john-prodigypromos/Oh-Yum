@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 import { GAME_WIDTH, GAME_HEIGHT } from './config';
 import { BootScene } from './scenes/BootScene';
+import { TitleScene } from './scenes/TitleScene';
+import { CharacterSelectScene } from './scenes/CharacterSelectScene';
 import { ArenaScene } from './scenes/ArenaScene';
 
 const config: Phaser.Types.Core.GameConfig = {
@@ -12,10 +14,10 @@ const config: Phaser.Types.Core.GameConfig = {
     default: 'arcade',
     arcade: {
       gravity: { x: 0, y: 0 },
-      debug: true,
+      debug: false,
     },
   },
-  scene: [BootScene, ArenaScene],
+  scene: [BootScene, TitleScene, CharacterSelectScene, ArenaScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
