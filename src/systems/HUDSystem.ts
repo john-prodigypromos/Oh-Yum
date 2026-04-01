@@ -69,8 +69,8 @@ export class HUDSystem {
     }).setVisible(false);
 
     this.scoreText = scene.add.text(20, GAME_HEIGHT - 30, 'SCORE: 0', {
-      fontSize: '14px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: '#000000',
-      stroke: '#ffff00', strokeThickness: 2,
+      fontSize: '20px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: '#ffffff',
+      stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0, 0.5).setDepth(100);
 
     this.studioText = scene.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, 'PRIDAY LABS', {
@@ -131,10 +131,7 @@ export class HUDSystem {
     // Score
     this.scoreText.setText(`SCORE: ${score.toLocaleString()}`);
 
-    // Targeting brackets
-    if (enemy.alive) {
-      this.drawTargetBrackets(enemy.sprite.x, enemy.sprite.y, 40);
-    }
+    // Targeting brackets removed
   }
 
   private drawBar(x: number, y: number, w: number, h: number, pct: number, color: number): void {
