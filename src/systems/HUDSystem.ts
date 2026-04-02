@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { Ship } from '../entities/Ship';
-import { COLORS, GAME_WIDTH, GAME_HEIGHT } from '../config';
+import { COLORS, getGameSize } from '../config';
 import { currentCharacter, CHARACTERS } from '../state/Character';
 
 export class HUDSystem {
@@ -19,6 +19,8 @@ export class HUDSystem {
   private pilotName: Phaser.GameObjects.Text;
 
   constructor(scene: Phaser.Scene) {
+    const { w, h } = getGameSize(scene);
+
     this.graphics = scene.add.graphics();
     this.graphics.setDepth(100);
 
@@ -26,7 +28,7 @@ export class HUDSystem {
     this.bannerGraphics = scene.add.graphics();
     this.bannerGraphics.setDepth(99);
 
-    this.titleText = scene.add.text(GAME_WIDTH / 2, 4, 'OH-YUM BLASTER', {
+    this.titleText = scene.add.text(w / 2, 4, 'OH-YUM BLASTER', {
       fontSize: '36px',
       fontFamily: 'Arial, sans-serif',
       fontStyle: 'bold',
@@ -35,7 +37,7 @@ export class HUDSystem {
       strokeThickness: 3,
     }).setOrigin(0.5, 0).setDepth(100);
 
-    this.titleJP = scene.add.text(GAME_WIDTH / 2, 42, 'オー・ヤム ブラスター', {
+    this.titleJP = scene.add.text(w / 2, 42, 'オー・ヤム ブラスター', {
       fontSize: '22px',
       fontFamily: 'Arial, sans-serif',
       fontStyle: 'bold',
@@ -68,12 +70,12 @@ export class HUDSystem {
       fontSize: '1px',
     }).setVisible(false);
 
-    this.scoreText = scene.add.text(20, GAME_HEIGHT - 30, 'SCORE: 0', {
+    this.scoreText = scene.add.text(20, h - 30, 'SCORE: 0', {
       fontSize: '20px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold', color: '#ffffff',
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0, 0.5).setDepth(100);
 
-    this.studioText = scene.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, 'PRIDAY LABS', {
+    this.studioText = scene.add.text(w - 16, h - 16, 'PRIDAY LABS', {
       fontSize: '22px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold',
       color: '#00ff66',
       stroke: '#000000', strokeThickness: 3,
@@ -82,7 +84,7 @@ export class HUDSystem {
     // ── Pilot portrait (top right) ──
     const cfg = CHARACTERS[currentCharacter];
     const portraitSize = 70;
-    const px = GAME_WIDTH - 20 - portraitSize / 2;
+    const px = w - 20 - portraitSize / 2;
     const py = 20 + portraitSize / 2;
 
     // Use the pixel version if available, otherwise original
@@ -130,8 +132,6 @@ export class HUDSystem {
 
     // Score
     this.scoreText.setText(`SCORE: ${score.toLocaleString()}`);
-
-    // Targeting brackets removed
   }
 
   private drawBar(x: number, y: number, w: number, h: number, pct: number, color: number): void {
@@ -147,26 +147,6 @@ export class HUDSystem {
     if (fillWidth > 0) {
       this.graphics.fillStyle(color, 1);
       this.graphics.fillRect(x + 1, y + 1, fillWidth - 2, h - 2);
-    }
-  }
-
-  private drawTargetBrackets(cx: number, cy: number, size: number): void {
-    const s = size;
-    const c = s * 0.35;
-    this.graphics.lineStyle(1.5, 0xff4444, 0.7);
-
-    const corners: [number, number, number, number, number, number][] = [
-      [-s, -s, c, 0, 0, c],
-      [s, -s, -c, 0, 0, c],
-      [-s, s, c, 0, 0, -c],
-      [s, s, -c, 0, 0, -c],
-    ];
-    for (const [ox, oy, dx1, dy1, dx2, dy2] of corners) {
-      this.graphics.beginPath();
-      this.graphics.moveTo(cx + ox + dx1, cy + oy + dy1);
-      this.graphics.lineTo(cx + ox, cy + oy);
-      this.graphics.lineTo(cx + ox + dx2, cy + oy + dy2);
-      this.graphics.strokePath();
     }
   }
 

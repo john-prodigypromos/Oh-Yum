@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
+import { COLORS, getGameSize } from '../config';
 import { DifficultyLevel, DIFFICULTY, setDifficulty } from '../state/Difficulty';
 import { createStarfieldTexture } from '../ui/Starfield';
 
@@ -9,26 +9,28 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create(): void {
+    const { w, h } = getGameSize(this);
+
     // Background
     if (!this.textures.exists('starfield')) {
       createStarfieldTexture(this, 'starfield');
     }
-    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'starfield');
+    this.add.image(w / 2, h / 2, 'starfield');
     this.cameras.main.setBackgroundColor(COLORS.arena);
 
     // ── Title text (no background) ──
-    this.add.text(GAME_WIDTH / 2, 65, 'OH-YUM BLASTER', {
+    this.add.text(w / 2, 65, 'OH-YUM BLASTER', {
       fontSize: '42px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold',
       color: '#ffffff', stroke: '#000000', strokeThickness: 4,
     }).setOrigin(0.5, 0);
 
-    this.add.text(GAME_WIDTH / 2, 115, 'オー・ヤム ブラスター', {
+    this.add.text(w / 2, 115, 'オー・ヤム ブラスター', {
       fontSize: '24px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold',
       color: '#ffffff', stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 0);
 
     // ── Select Difficulty ──
-    this.add.text(GAME_WIDTH / 2, 200, 'SELECT DIFFICULTY', {
+    this.add.text(w / 2, 200, 'SELECT DIFFICULTY', {
       fontSize: '20px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold',
       color: '#ffffff', stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0.5, 0);
@@ -40,16 +42,16 @@ export class TitleScene extends Phaser.Scene {
     ];
 
     for (const lvl of levels) {
-      this.createDifficultyButton(lvl.key, lvl.color, lvl.y, lvl.desc);
+      this.createDifficultyButton(lvl.key, lvl.color, lvl.y, lvl.desc, w);
     }
 
     // ── Footer ──
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 50, 'Press a button or tap to begin', {
+    this.add.text(w / 2, h - 50, 'Press a button or tap to begin', {
       fontSize: '14px', fontFamily: 'Arial, sans-serif',
       color: '#ffffff',
     }).setOrigin(0.5, 0);
 
-    this.add.text(GAME_WIDTH - 16, GAME_HEIGHT - 16, 'PRIDAY LABS', {
+    this.add.text(w - 16, h - 16, 'PRIDAY LABS', {
       fontSize: '18px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold',
       color: '#00ff66', stroke: '#000000', strokeThickness: 2,
     }).setOrigin(1, 1);
@@ -65,11 +67,12 @@ export class TitleScene extends Phaser.Scene {
     color: string,
     y: number,
     desc: string,
+    w: number,
   ): void {
     const cfg = DIFFICULTY[level];
     const btnW = 400;
     const btnH = 60;
-    const btnX = (GAME_WIDTH - btnW) / 2;
+    const btnX = (w - btnW) / 2;
 
     // Button background
     const gfx = this.add.graphics();
@@ -79,13 +82,13 @@ export class TitleScene extends Phaser.Scene {
     gfx.strokeRect(btnX, y, btnW, btnH);
 
     // Label
-    const label = this.add.text(GAME_WIDTH / 2, y + 12, `${cfg.label}`, {
+    const label = this.add.text(w / 2, y + 12, `${cfg.label}`, {
       fontSize: '22px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold',
       color: color, stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0.5, 0);
 
     // Description — white, not grey
-    this.add.text(GAME_WIDTH / 2, y + 38, desc, {
+    this.add.text(w / 2, y + 38, desc, {
       fontSize: '12px', fontFamily: 'Arial, sans-serif',
       color: '#ffffff',
     }).setOrigin(0.5, 0);

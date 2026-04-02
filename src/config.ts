@@ -4,6 +4,11 @@
 export let GAME_WIDTH = 1280;
 export const GAME_HEIGHT = 720;
 
+/** Get live game dimensions from a Phaser scene (preferred over GAME_WIDTH/GAME_HEIGHT) */
+export function getGameSize(scene: { scale: { width: number; height: number } }): { w: number; h: number } {
+  return { w: scene.scale.width || GAME_WIDTH, h: scene.scale.height || GAME_HEIGHT };
+}
+
 export const PHYSICS = {
   FIXED_TIMESTEP: 1000 / 60,
   THRUST: 300,

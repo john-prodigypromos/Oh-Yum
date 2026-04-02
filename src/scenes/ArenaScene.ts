@@ -6,7 +6,7 @@ import { DamageSystem } from '../systems/DamageSystem';
 import { HUDSystem } from '../systems/HUDSystem';
 import { RustyBehavior } from '../ai/behaviors/RustyBehavior';
 import { AIBehavior } from '../ai/AIBehavior';
-import { GAME_WIDTH, GAME_HEIGHT, SHIP, PHYSICS, COLORS } from '../config';
+import { SHIP, PHYSICS, COLORS, getGameSize } from '../config';
 import { currentDifficulty, DIFFICULTY } from '../state/Difficulty';
 import { currentCharacter, CHARACTERS } from '../state/Character';
 import { createStarfieldTexture } from '../ui/Starfield';
@@ -37,14 +37,16 @@ export class ArenaScene extends Phaser.Scene {
   }
 
   create(): void {
+    const { w, h } = getGameSize(this);
+
     createStarfieldTexture(this, 'starfield');
-    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'starfield');
+    this.add.image(w / 2, h / 2, 'starfield');
 
     this.cameras.main.setBackgroundColor(COLORS.arena);
 
     const border = this.add.graphics();
     border.lineStyle(1, COLORS.wall, 0.15);
-    border.strokeRect(2, 2, GAME_WIDTH - 4, GAME_HEIGHT - 4);
+    border.strokeRect(2, 2, w - 4, h - 4);
 
     // Systems
     this.physicsSystem = new PhysicsSystem();
@@ -63,7 +65,7 @@ export class ArenaScene extends Phaser.Scene {
       textureKey: 'ship_player',
       hitboxRadius: SHIP.HITBOX_RADIUS,
     };
-    this.player = new Ship(this, GAME_WIDTH * 0.3, GAME_HEIGHT * 0.7, playerConfig);
+    this.player = new Ship(this, w * 0.3, h * 0.7, playerConfig);
     this.player.rotation = -Math.PI / 2;
 
     // Enemy (Rusty) — scaled by difficulty
@@ -75,7 +77,7 @@ export class ArenaScene extends Phaser.Scene {
       textureKey: 'ship_enemy',
       hitboxRadius: SHIP.HITBOX_RADIUS,
     };
-    this.enemy = new Ship(this, GAME_WIDTH * 0.7, GAME_HEIGHT * 0.3, enemyConfig);
+    this.enemy = new Ship(this, w * 0.7, h * 0.3, enemyConfig);
     this.enemy.rotation = Math.PI / 2;
 
     // Damage smoke emitters
@@ -278,16 +280,17 @@ export class ArenaScene extends Phaser.Scene {
     }
 
     // Full-screen overlay
+    const { w, h } = getGameSize(this);
     const bannerBg = this.add.graphics();
     bannerBg.setDepth(199);
 
     if (result === 'lose') {
       // Dark overlay for Kip's face
       bannerBg.fillStyle(0x000000, 0.8);
-      bannerBg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+      bannerBg.fillRect(0, 0, w, h);
 
       // Kip's face — large and menacing
-      const kipFace = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 60, 'villain_kip');
+      const kipFace = this.add.image(w / 2, h / 2 - 60, 'villain_kip');
       const kipScale = 280 / Math.max(kipFace.width, kipFace.height);
       kipFace.setScale(kipScale);
       kipFace.setDepth(200);
@@ -298,7 +301,7 @@ export class ArenaScene extends Phaser.Scene {
       kipBorder.setDepth(199);
       kipBorder.lineStyle(3, 0xff2200, 0.8);
       kipBorder.strokeRect(
-        GAME_WIDTH / 2 - 145, GAME_HEIGHT / 2 - 60 - 145,
+        w / 2 - 145, h / 2 - 60 - 145,
         290, 290
       );
 
@@ -318,11 +321,11 @@ export class ArenaScene extends Phaser.Scene {
     } else {
       // Dark overlay for winner's face
       bannerBg.fillStyle(0x000000, 0.8);
-      bannerBg.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+      bannerBg.fillRect(0, 0, w, h);
 
       // Show the player's character face
       const charCfg = CHARACTERS[currentCharacter];
-      const heroFace = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 100, charCfg.imageKey);
+      const heroFace = this.add.image(w / 2, h / 2 - 100, charCfg.imageKey);
       const heroScale = 240 / Math.max(heroFace.width, heroFace.height);
       heroFace.setScale(heroScale);
       heroFace.setDepth(200);
@@ -333,7 +336,7 @@ export class ArenaScene extends Phaser.Scene {
       heroBorder.setDepth(199);
       heroBorder.lineStyle(4, charCfg.color, 1);
       heroBorder.strokeRect(
-        GAME_WIDTH / 2 - 125, GAME_HEIGHT / 2 - 100 - 125,
+        w / 2 - 125, h / 2 - 100 - 125,
         250, 250
       );
 
@@ -351,8 +354,8 @@ export class ArenaScene extends Phaser.Scene {
       ? 'YOU WON!\nHUMANITY HAS BEEN SAVED!'
       : 'YOU LOST!\nTRY AGAIN LOSER!';
 
-    const textY = result === 'lose' ? GAME_HEIGHT / 2 + 130 : GAME_HEIGHT / 2 + 100;
-    this.add.text(GAME_WIDTH / 2, textY, headline, {
+    const textY = result === 'lose' ? h / 2 + 130 : h / 2 + 100;
+    this.add.text(w / 2, textY, headline, {
       fontSize: '28px',
       fontFamily: 'Arial, sans-serif',
       fontStyle: 'bold',
@@ -367,7 +370,7 @@ export class ArenaScene extends Phaser.Scene {
       : '';
 
     if (subline) {
-      this.add.text(GAME_WIDTH / 2, textY + 40, subline, {
+      this.add.text(w / 2, textY + 40, subline, {
         fontSize: '20px',
         fontFamily: 'Arial, sans-serif',
         fontStyle: 'bold',
@@ -378,7 +381,7 @@ export class ArenaScene extends Phaser.Scene {
       }).setOrigin(0.5, 0.5).setDepth(200);
     }
 
-    this.add.text(GAME_WIDTH / 2, textY + 70, 'Press ENTER for menu', {
+    this.add.text(w / 2, textY + 70, 'Press ENTER for menu', {
       fontSize: '14px',
       fontFamily: 'Arial, sans-serif',
       color: '#ffffff',

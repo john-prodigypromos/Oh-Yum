@@ -3,7 +3,7 @@
 // Auto-detected: only shown when touch input is available.
 
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT } from '../config';
+import { getGameSize } from '../config';
 
 export interface TouchInput {
   rotateDir: number;  // -1, 0, or 1
@@ -35,8 +35,9 @@ export class TouchControls {
     this.enabled = scene.sys.game.device.input.touch;
 
     // Position: joystick bottom-left, fire button bottom-right
-    this.joystickCenter = { x: 140, y: GAME_HEIGHT - 140 };
-    this.fireCenter = { x: GAME_WIDTH - 120, y: GAME_HEIGHT - 140 };
+    const { w, h } = getGameSize(scene);
+    this.joystickCenter = { x: 140, y: h - 140 };
+    this.fireCenter = { x: w - 120, y: h - 140 };
 
     if (this.enabled) {
       this.setupTouchListeners();
@@ -56,7 +57,7 @@ export class TouchControls {
       }
 
       // Check if this touch is on the left half (joystick area)
-      if (pointer.x < GAME_WIDTH / 2) {
+      if (pointer.x < getGameSize(this.scene).w / 2) {
         this.joystickPointer = pointer;
       }
     });

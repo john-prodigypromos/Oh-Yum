@@ -1,10 +1,12 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT } from '../config';
 
 export function createStarfieldTexture(scene: Phaser.Scene, key: string): void {
+  // Use the live game dimensions so the starfield always covers the full canvas
+  const W = scene.scale.width || 1280;
+  const H = scene.scale.height || 720;
   const canvas = document.createElement('canvas');
-  canvas.width = GAME_WIDTH;
-  canvas.height = GAME_HEIGHT;
+  canvas.width = W;
+  canvas.height = H;
   const ctx = canvas.getContext('2d')!;
 
   let seed = 42;
@@ -12,26 +14,26 @@ export function createStarfieldTexture(scene: Phaser.Scene, key: string): void {
 
   // ── Deep space gradient ──
   const bg = ctx.createRadialGradient(
-    GAME_WIDTH * 0.4, GAME_HEIGHT * 0.45, 0,
-    GAME_WIDTH * 0.5, GAME_HEIGHT * 0.5, GAME_WIDTH * 0.7
+    W * 0.4, H * 0.45, 0,
+    W * 0.5, H * 0.5, W * 0.7
   );
   bg.addColorStop(0, '#0c1828');
   bg.addColorStop(0.5, '#070e1a');
   bg.addColorStop(1, '#020508');
   ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  ctx.fillRect(0, 0, W, H);
 
   // ── Nebula clouds ──
-  drawNebula(ctx, rng, GAME_WIDTH * 0.2, GAME_HEIGHT * 0.25, GAME_WIDTH * 0.35,
+  drawNebula(ctx, rng, W * 0.2, H * 0.25, W * 0.35,
     'rgba(60,20,80,0.08)', 'rgba(40,10,60,0.04)');
-  drawNebula(ctx, rng, GAME_WIDTH * 0.75, GAME_HEIGHT * 0.6, GAME_WIDTH * 0.3,
+  drawNebula(ctx, rng, W * 0.75, H * 0.6, W * 0.3,
     'rgba(15,30,70,0.1)', 'rgba(10,20,50,0.05)');
-  drawNebula(ctx, rng, GAME_WIDTH * 0.5, GAME_HEIGHT * 0.85, GAME_WIDTH * 0.4,
+  drawNebula(ctx, rng, W * 0.5, H * 0.85, W * 0.4,
     'rgba(10,50,50,0.06)', 'rgba(5,30,40,0.03)');
 
   // ── MASSIVE close sun (bottom-left, partially off-screen) ──
-  const sunX = GAME_WIDTH * 0.08;
-  const sunY = GAME_HEIGHT * 1.1;
+  const sunX = W * 0.08;
+  const sunY = H * 1.1;
   const sunR = 400;
 
   // Enormous outer glow — hot orange wash across the screen
@@ -41,7 +43,7 @@ export function createStarfieldTexture(scene: Phaser.Scene, key: string): void {
   outerGlow.addColorStop(0.6, 'rgba(255,50,0,0.025)');
   outerGlow.addColorStop(1, 'transparent');
   ctx.fillStyle = outerGlow;
-  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  ctx.fillRect(0, 0, W, H);
 
   // Corona layer 3 (huge fiery wash)
   const corona3 = ctx.createRadialGradient(sunX, sunY, sunR * 0.4, sunX, sunY, sunR * 1.5);
@@ -130,7 +132,7 @@ export function createStarfieldTexture(scene: Phaser.Scene, key: string): void {
   // ── Distant galaxy smudge ──
   ctx.save();
   ctx.globalAlpha = 0.04;
-  ctx.translate(GAME_WIDTH * 0.6, GAME_HEIGHT * 0.3);
+  ctx.translate(W * 0.6, H * 0.3);
   ctx.rotate(0.5);
   const galGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 40);
   galGrad.addColorStop(0, 'rgba(200,180,255,1)');
@@ -145,8 +147,8 @@ export function createStarfieldTexture(scene: Phaser.Scene, key: string): void {
 
   // ── Stars ──
   for (let i = 0; i < 700; i++) {
-    const x = rng() * GAME_WIDTH;
-    const y = rng() * GAME_HEIGHT;
+    const x = rng() * W;
+    const y = rng() * H;
     const size = i < 550 ? 0.3 + rng() * 0.5 : 0.8 + rng() * 1.4;
     const brightness = i < 550 ? 0.1 + rng() * 0.25 : 0.35 + rng() * 0.6;
 

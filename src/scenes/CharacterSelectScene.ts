@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_WIDTH, GAME_HEIGHT, COLORS } from '../config';
+import { COLORS, getGameSize } from '../config';
 import { CharacterName, CHARACTERS, setCharacter } from '../state/Character';
 import { createStarfieldTexture } from '../ui/Starfield';
 
@@ -9,25 +9,27 @@ export class CharacterSelectScene extends Phaser.Scene {
   }
 
   create(): void {
+    const { w, h } = getGameSize(this);
+
     // Background
     if (!this.textures.exists('starfield')) {
       createStarfieldTexture(this, 'starfield');
     }
-    this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'starfield');
+    this.add.image(w / 2, h / 2, 'starfield');
     this.cameras.main.setBackgroundColor(COLORS.arena);
 
     // Title
-    this.add.text(GAME_WIDTH / 2, 30, 'CHOOSE YOUR PILOT', {
+    this.add.text(w / 2, 30, 'CHOOSE YOUR PILOT', {
       fontSize: '32px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold',
       color: '#ffffff', stroke: '#000000', strokeThickness: 3,
     }).setOrigin(0.5, 0);
 
     // Two character cards side by side
-    this.createCharacterCard('owen', GAME_WIDTH * 0.3, 100);
-    this.createCharacterCard('william', GAME_WIDTH * 0.7, 100);
+    this.createCharacterCard('owen', w * 0.3, 100);
+    this.createCharacterCard('william', w * 0.7, 100);
 
     // Footer
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 30, 'Tap a pilot or press 1 / 2', {
+    this.add.text(w / 2, h - 30, 'Tap a pilot or press 1 / 2', {
       fontSize: '14px', fontFamily: 'Arial, sans-serif',
       color: '#ffffff',
     }).setOrigin(0.5, 0.5);
@@ -53,42 +55,33 @@ export class CharacterSelectScene extends Phaser.Scene {
     gfx.strokeRect(cardX, top, cardW, cardH);
 
     // Portrait — rendered pixelated
-    // Draw the photo into a small canvas, then display scaled up for pixel art effect
     const portraitSize = 300;
-    const pixelSize = 64; // Render at this size, then scale up
+    const pixelSize = 64;
     const portrait = this.add.image(cx, top + 30 + portraitSize / 2, cfg.imageKey);
 
-    // Scale to fit 300px wide
     const scaleToFit = portraitSize / Math.max(portrait.width, portrait.height);
     portrait.setScale(scaleToFit);
 
-    // Create pixelated version using a render texture
     const rt = this.add.renderTexture(cx, top + 30 + portraitSize / 2, pixelSize, pixelSize);
     rt.setVisible(false);
 
-    // Instead, use CSS-style pixelation via Phaser texture settings
-    // Set the texture to use nearest-neighbor filtering (pixelated)
     const tex = this.textures.get(cfg.imageKey);
     if (tex && tex.source[0]) {
       tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
     }
 
-    // Remove the initial portrait, recreate with pixel filter active
     portrait.destroy();
     rt.destroy();
 
-    // Create the pixelated portrait
     const pixPortrait = this.add.image(cx, top + 30 + portraitSize / 2, cfg.imageKey);
     const pScale = portraitSize / Math.max(pixPortrait.width, pixPortrait.height);
     pixPortrait.setScale(pScale);
 
-    // To get true pixel art look: draw to a tiny canvas, then display scaled
     this.createPixelPortrait(cfg.imageKey, `${name}_pixel`, pixelSize, (pixKey) => {
       pixPortrait.destroy();
       const pixImg = this.add.image(cx, top + 30 + portraitSize / 2, pixKey);
       const s = portraitSize / Math.max(pixImg.width, pixImg.height);
       pixImg.setScale(s);
-      // Force nearest-neighbor on the pixel version too
       const pixTex = this.textures.get(pixKey);
       if (pixTex && pixTex.source[0]) {
         pixTex.setFilter(Phaser.Textures.FilterMode.NEAREST);
@@ -128,10 +121,6 @@ export class CharacterSelectScene extends Phaser.Scene {
     zone.on('pointerdown', () => this.selectCharacter(name));
   }
 
-  /**
-   * Create a pixelated version of a portrait by drawing it small
-   * then registering as a new texture (nearest-neighbor does the rest).
-   */
   private createPixelPortrait(
     srcKey: string, destKey: string, tinySize: number,
     onReady: (key: string) => void,
@@ -147,10 +136,8 @@ export class CharacterSelectScene extends Phaser.Scene {
     canvas.height = tinySize;
     const ctx = canvas.getContext('2d')!;
 
-    // Disable smoothing for crisp downscale
     ctx.imageSmoothingEnabled = false;
 
-    // Draw the source image into the tiny canvas (this downsamples it)
     const aspect = srcImg.width / srcImg.height;
     let dw = tinySize, dh = tinySize;
     if (aspect > 1) {
@@ -161,12 +148,10 @@ export class CharacterSelectScene extends Phaser.Scene {
     const dx = (tinySize - dw) / 2;
     const dy = (tinySize - dh) / 2;
 
-    // First pass: draw smoothed to get decent downscale
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'low';
     ctx.drawImage(srcImg, dx, dy, dw, dh);
 
-    // Register as new texture
     if (this.textures.exists(destKey)) this.textures.remove(destKey);
     const newTex = this.textures.addCanvas(destKey, canvas);
     if (newTex) {
