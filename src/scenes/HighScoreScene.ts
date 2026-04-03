@@ -44,10 +44,16 @@ export class HighScoreScene extends Phaser.Scene {
     // ── Name input — use a hidden HTML input for iOS keyboard support ──
     const inputEl = document.createElement('input');
     inputEl.type = 'text';
-    inputEl.maxLength = 20;
+    inputEl.maxLength = 12;
     inputEl.placeholder = 'Your name...';
     inputEl.autocomplete = 'off';
     inputEl.autocapitalize = 'characters';
+    inputEl.pattern = '[A-Za-z0-9 ]*';
+
+    // Filter to alphanumeric + spaces only, auto-uppercase
+    inputEl.addEventListener('input', () => {
+      inputEl.value = inputEl.value.replace(/[^A-Za-z0-9 ]/g, '').toUpperCase().substring(0, 12);
+    });
     inputEl.style.cssText = `
       position: fixed;
       left: 50%; top: 50%;
@@ -94,7 +100,7 @@ export class HighScoreScene extends Phaser.Scene {
     setTimeout(() => inputEl.focus(), 200);
 
     const submitName = () => {
-      const name = inputEl.value.trim().substring(0, 20) || 'ANON';
+      const name = inputEl.value.replace(/[^A-Za-z0-9 ]/g, '').trim().substring(0, 12) || 'ANON';
 
       // Remove HTML elements
       inputEl.remove();
