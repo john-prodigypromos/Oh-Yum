@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Option 3: Toggle Top-Down / Pseudo-3D</title>
+<style>*{margin:0;padding:0}body{background:#000;display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;font-family:Arial,sans-serif;color:#fff}
+canvas{border:1px solid #333}h2{margin-bottom:8px;color:#ffcc00}
+.controls{margin-top:10px;display:flex;gap:15px;align-items:center}
+.btn{padding:8px 20px;font-size:14px;font-weight:bold;cursor:pointer;border:2px solid #ffcc00;background:rgba(10,18,32,0.9);color:#ffcc00;border-radius:4px}
+.btn.active{background:#ffcc00;color:#000}
+p{margin-top:8px;color:#888;font-size:13px;text-align:center;max-width:600px}</style>
+</head><body>
+<h2>Option 3: Toggle Between Views</h2>
+<canvas id="c" width="800" height="500"></canvas>
+<div class="controls">
+  <button class="btn active" id="btn-top" onclick="setView('top')">TOP-DOWN</button>
+  <button class="btn" id="btn-3d" onclick="setView('3d')">PSEUDO-3D</button>
+  <span style="color:#666;font-size:12px">Press V to toggle  |  Arrow keys to move  |  Space to fire</span>
+</div>
+<p>Same game, two visual modes. All physics/AI stays identical. Player can switch at any time.</p>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const W=800,H=500;
+let view='top'; // 'top' or '3d'
+let playerX=400,playerY=350,playerAngle=-Math.PI/2,speed=2.5;
+let enemies=[
+  {x:500,y:150,angle:Math.PI/2,hp:40,maxHp:40,vx:0,vy:0},
+  {x:200,y:100,angle:Math.PI*0.7,hp:40,maxHp:40,vx:0,vy:0},
+];
+let bolts=[];
+let keys={};
+let frame=0;
+let stars=[];for(let i=0;i<200;i++)stars.push({x:Math.random()*W,y:Math.random()*H,s:Math.random()*1.2+0.3,b:Math.random()*0.4+0.1});
+
+document.addEventListener('keydown',e=>{
+  keys[e.key]=true;
+  if(e.key==='v'||e.key==='V'){view=view==='top'?'3d':'top';updateButtons();}
+  if(e.key===' ')bolts.push({x:playerX,y:playerY,angle:playerAngle,life:80,owner:'player'});
+});
+document.addEventListener('keyup',e=>keys[e.key]=false);
+
+function setView(v){view=v;updateButtons();}
+function updateButtons(){
+  document.getElementById('btn-top').className=view==='top'?'btn active':'btn';
+  document.getElementById('btn-3d').className=view==='3d'?'btn active':'btn';
+}
+
+// ══════ TOP-DOWN RENDERER ══════
+function drawTopDown(){
+  // Background
+  ctx.fillStyle='#0a1220';
+  ctx.fillRect(0,0,W,H);
+  for(const st of stars){ctx.fillStyle=`rgba(220,230,255,${st.b})`;ctx.beginPath();ctx.arc(st.x,st.y,st.s,0,Math.PI*2);ctx.fill();}
+
+  // Grid
+  ctx.strokeStyle='rgba(40,60,100,0.08)';
+  for(let x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  // Border
+  ctx.strokeStyle='rgba(50,70,90,0.3)';ctx.strokeRect(2,2,W-4,H-4);
+
+  // Bolts
+  for(const b of bolts){
+    ctx.fillStyle=b.owner==='player'?'#00ddff':'#ff3322';
+    ctx.save();ctx.translate(b.x,b.y);ctx.rotate(b.angle);
+    ctx.fillRect(-1,-6,3,12);ctx.restore();
+  }
+
+  // Enemies
+  for(const e of enemies){
+    if(e.hp<=0)continue;
+    drawTopShip(e.x,e.y,e.angle,16,'#cc3333','#881111');
+    // HP bar
+    ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(e.x-15,e.y-25,30,4);
+    ctx.fillStyle='#ff4444';ctx.fillRect(e.x-15,e.y-25,30*(e.hp/e.maxHp),4);
+  }
+
+  // Player
+  drawTopShip(playerX,playerY,playerAngle,18,'#88aacc','#5577aa');
+
+  // HUD
+  ctx.fillStyle='#fff';ctx.font='bold 20px Arial';
+  ctx.fillText('TOP-DOWN VIEW',W/2-80,30);
+}
+
+function drawTopShip(x,y,angle,size,color1,color2){
+  ctx.save();ctx.translate(x,y);ctx.rotate(angle+Math.PI/2);
+  ctx.fillStyle=color1;
+  ctx.beginPath();ctx.moveTo(0,-size);ctx.lineTo(-size*0.6,size*0.4);ctx.lineTo(0,size*0.2);ctx.lineTo(size*0.6,size*0.4);ctx.closePath();ctx.fill();
+  ctx.fillStyle=color2;
+  ctx.beginPath();ctx.moveTo(-size*0.3,0);ctx.lineTo(-size*0.8,size*0.3);ctx.lineTo(-size*0.2,size*0.2);ctx.closePath();ctx.fill();
+  ctx.beginPath();ctx.moveTo(size*0.3,0);ctx.lineTo(size*0.8,size*0.3);ctx.lineTo(size*0.2,size*0.2);ctx.closePath();ctx.fill();
+  ctx.restore();
+}
+
+// ══════ PSEUDO-3D RENDERER ══════
+const HORIZON=170;
+function drawPseudo3D(){
+  // Sky
+  ctx.fillStyle='#060e18';ctx.fillRect(0,0,W,HORIZON);
+  for(const st of stars){if(st.y<HORIZON){ctx.fillStyle=`rgba(220,230,255,${st.b})`;ctx.beginPath();ctx.arc(st.x,st.y,st.s,0,Math.PI*2);ctx.fill();}}
+
+  // Floor
+  for(let y=HORIZON;y<H;y++){
+    const d=(y-HORIZON)/(H-HORIZON);
+    ctx.fillStyle=`rgb(${8+d*5|0},${12+d*8|0},${25+d*15|0})`;
+    ctx.fillRect(0,y,W,1);
+    if(y%8<1){ctx.fillStyle=`rgba(40,60,100,${0.12*d})`;ctx.fillRect(0,y,W,1);}
+  }
+  for(let i=-10;i<=10;i++){ctx.beginPath();ctx.strokeStyle='rgba(40,60,100,0.08)';ctx.moveTo(W/2+i*80,HORIZON);ctx.lineTo(W/2+i*300,H);ctx.stroke();}
+
+  // Project enemies
+  let drawList=[];
+  for(const e of enemies){
+    if(e.hp<=0)continue;
+    const dx=e.x-playerX,dy=e.y-playerY;
+    const rcos=Math.cos(-playerAngle),rsin=Math.sin(-playerAngle);
+    const rx=dx*rcos-dy*rsin,ry=dx*rsin+dy*rcos;
+    if(ry<10)continue;
+    const scale=250/ry;
+    const sx=W/2+rx*scale;
+    const sy=HORIZON+scale*25;
+    drawList.push({sx,sy,scale,ry,e});
+  }
+
+  // Bolts in 3D
+  for(const b of bolts){
+    const dx=b.x-playerX,dy=b.y-playerY;
+    const rcos=Math.cos(-playerAngle),rsin=Math.sin(-playerAngle);
+    const rx=dx*rcos-dy*rsin,ry=dx*rsin+dy*rcos;
+    if(ry<5)continue;
+    const scale=250/ry;
+    const sx=W/2+rx*scale;
+    const sy=HORIZON+scale*25;
+    drawList.push({sx,sy,scale,ry,bolt:b});
+  }
+
+  drawList.sort((a,b)=>b.ry-a.ry);
+  for(const item of drawList){
+    if(item.bolt){
+      const len=Math.max(3,item.scale*12);
+      ctx.fillStyle=item.bolt.owner==='player'?'#00ffff':'#ff3322';
+      ctx.shadowColor=ctx.fillStyle;ctx.shadowBlur=6;
+      ctx.fillRect(item.sx-1,item.sy-len,3,len);
+      ctx.shadowBlur=0;
+    }else{
+      const s=Math.max(6,Math.min(35,item.scale*20));
+      ctx.save();ctx.translate(item.sx,item.sy);
+      ctx.fillStyle='#cc3333';
+      ctx.beginPath();ctx.moveTo(0,-s);ctx.lineTo(-s*0.6,s*0.3);ctx.lineTo(0,s*0.1);ctx.lineTo(s*0.6,s*0.3);ctx.closePath();ctx.fill();
+      ctx.fillStyle='#881111';
+      ctx.beginPath();ctx.moveTo(-s*0.3,0);ctx.lineTo(-s*0.8,s*0.2);ctx.lineTo(-s*0.2,s*0.15);ctx.closePath();ctx.fill();
+      ctx.beginPath();ctx.moveTo(s*0.3,0);ctx.lineTo(s*0.8,s*0.2);ctx.lineTo(s*0.2,s*0.15);ctx.closePath();ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // Player ship at bottom
+  const bob=Math.sin(frame*0.05)*2;
+  const tilt=keys['ArrowLeft']?-4:keys['ArrowRight']?4:0;
+  ctx.save();ctx.translate(W/2,H-70+bob);ctx.rotate(tilt*Math.PI/180);
+  drawTopShip(0,0,0,22,'#88aacc','#5577aa');
+  ctx.restore();
+  if(keys['ArrowUp']){ctx.fillStyle='rgba(0,150,255,0.3)';ctx.beginPath();ctx.ellipse(W/2,H-40+bob,6,15,0,0,Math.PI*2);ctx.fill();}
+
+  ctx.fillStyle='#fff';ctx.font='bold 20px Arial';
+  ctx.fillText('PSEUDO-3D VIEW',W/2-90,30);
+}
+
+// ══════ SHARED GAME LOGIC ══════
+function updateGame(){
+  frame++;
+  if(keys['ArrowLeft'])playerAngle-=0.04;
+  if(keys['ArrowRight'])playerAngle+=0.04;
+  if(keys['ArrowUp']){playerX+=Math.cos(playerAngle)*speed;playerY+=Math.sin(playerAngle)*speed;}
+  if(keys['ArrowDown']){playerX-=Math.cos(playerAngle)*speed*0.5;playerY-=Math.sin(playerAngle)*speed*0.5;}
+
+  // Clamp player
+  playerX=Math.max(20,Math.min(W-20,playerX));
+  playerY=Math.max(20,Math.min(H-20,playerY));
+
+  // Update bolts
+  for(const b of bolts){
+    b.x+=Math.cos(b.angle)*6;
+    b.y+=Math.sin(b.angle)*6;
+    b.life--;
+  }
+  bolts=bolts.filter(b=>b.life>0&&b.x>0&&b.x<W&&b.y>0&&b.y<H);
+
+  // Enemy AI — chase + fire
+  for(const e of enemies){
+    if(e.hp<=0)continue;
+    const dx=playerX-e.x,dy=playerY-e.y;
+    const ang=Math.atan2(dy,dx);
+    let diff=ang-e.angle;
+    while(diff>Math.PI)diff-=Math.PI*2;
+    while(diff<-Math.PI)diff+=Math.PI*2;
+    e.angle+=Math.sign(diff)*0.02;
+    if(Math.abs(diff)<0.5){e.x+=Math.cos(e.angle)*1;e.y+=Math.sin(e.angle)*1;}
+    if(Math.abs(diff)<0.3&&frame%60===0){
+      bolts.push({x:e.x,y:e.y,angle:e.angle,life:60,owner:'enemy'});
+    }
+
+    // Bolt hits
+    for(let i=bolts.length-1;i>=0;i--){
+      const b=bolts[i];
+      if(b.owner!=='player')continue;
+      const bdx=b.x-e.x,bdy=b.y-e.y;
+      if(Math.sqrt(bdx*bdx+bdy*bdy)<20){
+        e.hp-=5;
+        bolts.splice(i,1);
+      }
+    }
+  }
+
+  // HUD (shared)
+  ctx.fillStyle='rgba(0,0,0,0.5)';ctx.fillRect(10,H-45,180,35);
+  ctx.strokeStyle='#00ddff';ctx.strokeRect(10,H-45,180,35);
+  ctx.fillStyle='#00ddff';ctx.font='bold 11px Arial';ctx.fillText('DEFLECTOR',16,H-30);
+  ctx.fillStyle='#00ddff';ctx.fillRect(90,H-34,80,8);
+  ctx.fillStyle='#44ff44';ctx.font='bold 11px Arial';ctx.fillText('HULL',16,H-17);
+  ctx.fillStyle='#44ff44';ctx.fillRect(90,H-21,80,8);
+
+  ctx.fillStyle='#ffcc00';ctx.font='14px Arial';
+  ctx.fillText(`TARGETS: ${enemies.filter(e=>e.hp>0).length}`,W-120,H-20);
+}
+
+function loop(){
+  updateGame();
+  if(view==='top')drawTopDown();else drawPseudo3D();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body></html>

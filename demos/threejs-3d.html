@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Option 2: Three.js Real 3D</title>
+<style>*{margin:0;padding:0}body{background:#000;overflow:hidden;font-family:Arial,sans-serif}
+#hud{position:fixed;top:0;left:0;width:100%;pointer-events:none;z-index:10}
+h2{color:#ffcc00;text-align:center;margin-top:10px;font-size:18px}
+p{color:#888;text-align:center;font-size:12px;margin-top:4px}
+.bar-group{position:fixed;top:60px;left:20px}
+.bar-label{color:#00eeff;font-size:12px;font-weight:bold;margin-bottom:2px}
+.bar{width:200px;height:10px;background:rgba(0,0,0,0.5);border:1px solid;margin-bottom:8px}
+.bar-fill{height:100%}
+.shield-bar{border-color:#00ccff}.shield-fill{background:#00ccff;width:80%}
+.hull-bar{border-color:#44ff44}.hull-fill{background:#44ff44;width:100%}
+#crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:10}
+#score{position:fixed;bottom:20px;left:20px;color:#fff;font-size:16px;font-weight:bold}
+#studio{position:fixed;bottom:16px;right:16px;color:#00ff66;font-size:16px;font-weight:bold}
+</style>
+</head><body>
+<div id="hud">
+  <h2>OH-YUM BLASTER — Three.js 3D</h2>
+  <p>Full 3D cockpit view. Arrow keys to fly, mouse to aim. Complete engine rewrite required.</p>
+</div>
+<div class="bar-group">
+  <div class="bar-label">DEFLECTOR</div>
+  <div class="bar shield-bar"><div class="bar-fill shield-fill"></div></div>
+  <div class="bar-label">HULL</div>
+  <div class="bar hull-bar"><div class="bar-fill hull-fill"></div></div>
+</div>
+<svg id="crosshair" width="40" height="40" viewBox="0 0 40 40">
+  <circle cx="20" cy="20" r="15" fill="none" stroke="rgba(0,255,255,0.4)" stroke-width="1"/>
+  <line x1="20" y1="2" x2="20" y2="12" stroke="rgba(0,255,255,0.6)" stroke-width="1"/>
+  <line x1="20" y1="28" x2="20" y2="38" stroke="rgba(0,255,255,0.6)" stroke-width="1"/>
+  <line x1="2" y1="20" x2="12" y2="20" stroke="rgba(0,255,255,0.6)" stroke-width="1"/>
+  <line x1="28" y1="20" x2="38" y2="20" stroke="rgba(0,255,255,0.6)" stroke-width="1"/>
+  <circle cx="20" cy="20" r="2" fill="rgba(0,255,255,0.8)"/>
+</svg>
+<div id="score">SCORE: 12,450</div>
+<div id="studio">PRIDAY LABS</div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x060e18,0.003);
+const camera=new THREE.PerspectiveCamera(75,window.innerWidth/window.innerHeight,0.1,2000);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(window.innerWidth,window.innerHeight);
+renderer.setClearColor(0x060e18);
+document.body.appendChild(renderer.domElement);
+
+// Starfield
+const starGeo=new THREE.BufferGeometry();
+const starVerts=[];
+for(let i=0;i<3000;i++){
+  starVerts.push((Math.random()-0.5)*2000,(Math.random()-0.5)*2000,(Math.random()-0.5)*2000);
+}
+starGeo.setAttribute('position',new THREE.Float32BufferAttribute(starVerts,3));
+const starMat=new THREE.PointsMaterial({color:0xccddff,size:1.5,transparent:true,opacity:0.7});
+scene.add(new THREE.Points(starGeo,starMat));
+
+// Grid floor
+const gridHelper=new THREE.GridHelper(1000,50,0x1a2838,0x0a1420);
+gridHelper.position.y=-30;
+scene.add(gridHelper);
+
+// Ambient + directional light
+scene.add(new THREE.AmbientLight(0x334466,0.8));
+const dirLight=new THREE.DirectionalLight(0xffeedd,1);
+dirLight.position.set(50,100,50);
+scene.add(dirLight);
+
+// Enemy ships (simple geometry)
+function createEnemyShip(){
+  const group=new THREE.Group();
+  // Body
+  const bodyGeo=new THREE.ConeGeometry(3,10,4);
+  const bodyMat=new THREE.MeshPhongMaterial({color:0xcc3333,flatShading:true});
+  const body=new THREE.Mesh(bodyGeo,bodyMat);
+  body.rotation.x=Math.PI/2;
+  group.add(body);
+  // Wings
+  const wingGeo=new THREE.BoxGeometry(12,0.5,4);
+  const wingMat=new THREE.MeshPhongMaterial({color:0x881111,flatShading:true});
+  const wings=new THREE.Mesh(wingGeo,wingMat);
+  wings.position.z=2;
+  group.add(wings);
+  // Engine glow
+  const glowGeo=new THREE.SphereGeometry(1.2,8,8);
+  const glowMat=new THREE.MeshBasicMaterial({color:0xff4400});
+  const glow=new THREE.Mesh(glowGeo,glowMat);
+  glow.position.z=5;
+  group.add(glow);
+  return group;
+}
+
+const enemies=[];
+for(let i=0;i<3;i++){
+  const ship=createEnemyShip();
+  ship.position.set((Math.random()-0.5)*200,Math.random()*30-10,-100-Math.random()*200);
+  ship.userData={vx:(Math.random()-0.5)*0.5,vy:Math.sin(i)*0.3,vz:0.2+Math.random()*0.3,phase:Math.random()*Math.PI*2};
+  scene.add(ship);
+  enemies.push(ship);
+}
+
+// Bolts
+const boltGeo=new THREE.CylinderGeometry(0.2,0.2,4,4);
+const boltMat=new THREE.MeshBasicMaterial({color:0x00ffff});
+const bolts=[];
+
+// Player cockpit frame (edges visible at screen borders)
+const cockpitGeo=new THREE.RingGeometry(18,20,6);
+const cockpitMat=new THREE.MeshBasicMaterial({color:0x223344,transparent:true,opacity:0.15,side:THREE.DoubleSide});
+const cockpit=new THREE.Mesh(cockpitGeo,cockpitMat);
+cockpit.position.z=-25;
+camera.add(cockpit);
+scene.add(camera);
+
+// Cockpit struts
+const strutMat=new THREE.LineBasicMaterial({color:0x334455,transparent:true,opacity:0.3});
+for(let a=0;a<6;a++){
+  const angle=a*Math.PI/3;
+  const pts=[new THREE.Vector3(Math.cos(angle)*12,Math.sin(angle)*12,-20),new THREE.Vector3(Math.cos(angle)*25,Math.sin(angle)*25,-15)];
+  const geo=new THREE.BufferGeometry().setFromPoints(pts);
+  camera.add(new THREE.Line(geo,strutMat));
+}
+
+camera.position.set(0,10,50);
+camera.lookAt(0,0,-100);
+
+let keys={};
+document.addEventListener('keydown',e=>keys[e.key]=true);
+document.addEventListener('keyup',e=>keys[e.key]=false);
+
+let frame=0;
+function animate(){
+  frame++;
+  requestAnimationFrame(animate);
+
+  // Camera movement
+  if(keys['ArrowLeft'])camera.position.x-=1.5;
+  if(keys['ArrowRight'])camera.position.x+=1.5;
+  if(keys['ArrowUp'])camera.position.z-=2;
+  if(keys['ArrowDown'])camera.position.z+=1;
+
+  // Slight camera roll on turn
+  const targetRoll=keys['ArrowLeft']?0.1:keys['ArrowRight']?-0.1:0;
+  camera.rotation.z+=(targetRoll-camera.rotation.z)*0.05;
+
+  // Enemy movement (simple patrol)
+  for(const e of enemies){
+    e.userData.phase+=0.02;
+    e.position.x+=Math.sin(e.userData.phase)*e.userData.vx;
+    e.position.y+=Math.cos(e.userData.phase*1.3)*e.userData.vy;
+    e.position.z+=e.userData.vz;
+    // Loop enemies back
+    if(e.position.z>camera.position.z+50){
+      e.position.z=camera.position.z-200-Math.random()*100;
+      e.position.x=(Math.random()-0.5)*200;
+    }
+    // Face camera roughly
+    e.lookAt(camera.position);
+  }
+
+  // Bolt firing
+  if(keys[' ']&&frame%6===0){
+    const bolt=new THREE.Mesh(boltGeo,boltMat);
+    bolt.position.copy(camera.position);
+    bolt.position.z-=5;
+    bolt.rotation.x=Math.PI/2;
+    bolt.userData={life:120};
+    scene.add(bolt);
+    bolts.push(bolt);
+  }
+
+  // Update bolts
+  for(let i=bolts.length-1;i>=0;i--){
+    bolts[i].position.z-=4;
+    bolts[i].userData.life--;
+    if(bolts[i].userData.life<=0){
+      scene.remove(bolts[i]);
+      bolts.splice(i,1);
+    }
+  }
+
+  renderer.render(scene,camera);
+}
+animate();
+
+window.addEventListener('resize',()=>{
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+</script>
+</body></html>

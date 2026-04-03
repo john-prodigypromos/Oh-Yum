@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Option 1: Mode 7 Pseudo-3D</title>
+<style>*{margin:0;padding:0}body{background:#000;display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;font-family:Arial,sans-serif;color:#fff}
+canvas{border:1px solid #333}h2{margin-bottom:10px;color:#ffcc00}p{margin-top:10px;color:#888;font-size:13px;text-align:center;max-width:600px}</style>
+</head><body>
+<h2>Option 1: Mode 7 Pseudo-3D (Phaser, no rewrite)</h2>
+<canvas id="c" width="800" height="500"></canvas>
+<p>Star Fox / F-Zero style. Floor tilts into perspective, ships scale by "distance". All gameplay stays 2D under the hood. Arrow keys to fly.</p>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const W=800,H=500,HORIZON=180;
+let playerX=0,playerY=0,playerAngle=0,speed=3;
+let enemies=[{x:100,y:200,hp:1},{x:-150,y:300,hp:1},{x:50,y:400,hp:1}];
+let stars=[];for(let i=0;i<120;i++)stars.push({x:Math.random()*W,y:Math.random()*HORIZON,s:Math.random()*1.5+0.3,b:Math.random()*0.5+0.2});
+let bolts=[];
+let keys={};
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(e.key===' '){bolts.push({x:playerX,y:playerY,dy:-8,life:60})}});
+document.addEventListener('keyup',e=>keys[e.key]=false);
+
+function worldToScreen(wx,wy){
+  const dx=wx-playerX,dy=wy-playerY;
+  const rcos=Math.cos(-playerAngle),rsin=Math.sin(-playerAngle);
+  const rx=dx*rcos-dy*rsin,ry=dx*rsin+dy*rcos;
+  if(ry<10)return null;
+  const scale=300/ry;
+  const sx=W/2+rx*scale;
+  const sy=HORIZON+(ry<20?0:scale*30);
+  return{x:sx,y:sy,s:scale,d:ry};
+}
+
+function drawFloor(){
+  for(let y=HORIZON;y<H;y++){
+    const depth=(y-HORIZON)/(H-HORIZON);
+    const perspective=0.5+depth*0.5;
+    const r=Math.floor(8+depth*5);
+    const g=Math.floor(12+depth*8);
+    const b=Math.floor(25+depth*15);
+    ctx.fillStyle=`rgb(${r},${g},${b})`;
+    ctx.fillRect(0,y,W,1);
+    // Grid lines
+    if(y%8<1){
+      ctx.fillStyle=`rgba(40,60,100,${0.15*depth})`;
+      ctx.fillRect(0,y,W,1);
+    }
+  }
+  // Vertical grid lines (perspective)
+  for(let i=-10;i<=10;i++){
+    ctx.beginPath();
+    ctx.strokeStyle='rgba(40,60,100,0.1)';
+    ctx.moveTo(W/2+i*80,HORIZON);
+    ctx.lineTo(W/2+i*300,H);
+    ctx.stroke();
+  }
+}
+
+function drawShip(sx,sy,scale,color,isPlayer){
+  const s=Math.max(8,Math.min(40,scale*25));
+  ctx.save();
+  ctx.translate(sx,sy);
+  // Shadow
+  ctx.fillStyle='rgba(0,0,0,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(0,s*0.3,s*0.8,s*0.15,0,0,Math.PI*2);
+  ctx.fill();
+  // Ship body
+  ctx.fillStyle=color;
+  ctx.beginPath();
+  ctx.moveTo(0,-s);
+  ctx.lineTo(-s*0.6,s*0.3);
+  ctx.lineTo(0,s*0.1);
+  ctx.lineTo(s*0.6,s*0.3);
+  ctx.closePath();
+  ctx.fill();
+  // Wings
+  ctx.fillStyle=isPlayer?'#6688aa':'#aa4444';
+  ctx.beginPath();
+  ctx.moveTo(-s*0.3,0);
+  ctx.lineTo(-s*0.9,s*0.2);
+  ctx.lineTo(-s*0.2,s*0.15);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(s*0.3,0);
+  ctx.lineTo(s*0.9,s*0.2);
+  ctx.lineTo(s*0.2,s*0.15);
+  ctx.closePath();
+  ctx.fill();
+  // Cockpit
+  ctx.fillStyle=isPlayer?'#00ddff':'#ff4422';
+  ctx.beginPath();
+  ctx.ellipse(0,-s*0.3,s*0.15,s*0.25,0,0,Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBolt(sx,sy,scale){
+  const len=Math.max(4,scale*15);
+  ctx.fillStyle='#00ffff';
+  ctx.shadowColor='#00ffff';
+  ctx.shadowBlur=8;
+  ctx.fillRect(sx-1,sy-len,3,len);
+  ctx.shadowBlur=0;
+}
+
+function drawHUD(){
+  ctx.fillStyle='rgba(0,0,0,0.5)';
+  ctx.fillRect(10,H-50,200,40);
+  ctx.strokeStyle='#00ddff';
+  ctx.strokeRect(10,H-50,200,40);
+  ctx.fillStyle='#00ddff';
+  ctx.font='bold 14px Arial';
+  ctx.fillText('DEFLECTOR ████████',20,H-32);
+  ctx.fillStyle='#44ff44';
+  ctx.fillText('HULL     ██████████',20,H-16);
+
+  ctx.fillStyle='#fff';
+  ctx.font='bold 24px Arial';
+  ctx.fillText('OH-YUM BLASTER',W/2-100,30);
+  ctx.font='14px Arial';
+  ctx.fillStyle='#ffcc00';
+  ctx.fillText('MODE 7 PSEUDO-3D',W/2-70,50);
+}
+
+let frame=0;
+function loop(){
+  frame++;
+  ctx.fillStyle='#060e18';
+  ctx.fillRect(0,0,W,HORIZON);
+
+  // Stars
+  for(const st of stars){
+    ctx.fillStyle=`rgba(220,230,255,${st.b})`;
+    ctx.beginPath();
+    ctx.arc(st.x,st.y,st.s,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  drawFloor();
+
+  // Input
+  if(keys['ArrowLeft'])playerAngle-=0.03;
+  if(keys['ArrowRight'])playerAngle+=0.03;
+  if(keys['ArrowUp']){playerX+=Math.sin(playerAngle)*speed;playerY+=Math.cos(playerAngle)*speed;}
+  if(keys['ArrowDown']){playerX-=Math.sin(playerAngle)*speed*0.5;playerY-=Math.cos(playerAngle)*speed*0.5;}
+
+  // Update bolts
+  for(const b of bolts){b.y-=b.dy;b.life--;}
+  bolts=bolts.filter(b=>b.life>0);
+
+  // Draw enemies sorted by distance
+  let drawList=[];
+  for(const e of enemies){
+    if(!e.hp)continue;
+    const scr=worldToScreen(e.x,e.y);
+    if(scr&&scr.d>10)drawList.push({...scr,type:'enemy',ref:e});
+  }
+  // Bolts
+  for(const b of bolts){
+    const scr=worldToScreen(b.x,b.y);
+    if(scr&&scr.d>10)drawList.push({...scr,type:'bolt'});
+  }
+
+  drawList.sort((a,b)=>b.d-a.d);
+  for(const item of drawList){
+    if(item.type==='enemy')drawShip(item.x,item.y,item.s,'#cc3333',false);
+    else if(item.type==='bolt')drawBolt(item.x,item.y,item.s);
+  }
+
+  // Player ship (always at bottom center)
+  const bob=Math.sin(frame*0.05)*3;
+  const tilt=keys['ArrowLeft']?-5:keys['ArrowRight']?5:0;
+  ctx.save();
+  ctx.translate(W/2,H-80+bob);
+  ctx.rotate(tilt*Math.PI/180);
+  drawShip(0,0,1.5,'#88aacc',true);
+  ctx.restore();
+
+  // Engine glow
+  if(keys['ArrowUp']){
+    ctx.fillStyle='rgba(0,150,255,0.3)';
+    ctx.beginPath();
+    ctx.ellipse(W/2,H-45+bob,8,20,0,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  drawHUD();
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body></html>
