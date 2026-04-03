@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_HEIGHT } from './config';
+import { GAME_HEIGHT, runtime } from './config';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { CharacterSelectScene } from './scenes/CharacterSelectScene';
@@ -21,9 +21,8 @@ function getContainerAspect(): number {
 const aspect = getContainerAspect();
 const gameWidth = Math.round(GAME_HEIGHT * aspect);
 
-// Update the exported GAME_WIDTH so all systems use the correct value
-import * as cfg from './config';
-(cfg as any).GAME_WIDTH = gameWidth;
+// Update the mutable runtime width so all systems use the correct value
+runtime.GAME_WIDTH = gameWidth;
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
@@ -60,7 +59,7 @@ function handleResize() {
 
   // Only resize if the aspect ratio actually changed meaningfully
   if (Math.abs(newWidth - game.scale.width) > 10) {
-    (cfg as any).GAME_WIDTH = newWidth;
+    runtime.GAME_WIDTH = newWidth;
     game.scale.resize(newWidth, GAME_HEIGHT);
   }
   game.scale.refresh();

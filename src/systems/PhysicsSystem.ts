@@ -1,5 +1,5 @@
 import { Ship } from '../entities/Ship';
-import { PHYSICS, GAME_WIDTH, GAME_HEIGHT } from '../config';
+import { PHYSICS, runtime, GAME_HEIGHT } from '../config';
 import { dragPerStep } from '../utils/math';
 
 export interface InputState {
@@ -78,8 +78,8 @@ export class PhysicsSystem {
       finalX = r;
       ship.velocityX = Math.abs(ship.velocityX) * PHYSICS.WALL_BOUNCE_FACTOR;
       hitWall = true;
-    } else if (newX + r > GAME_WIDTH) {
-      finalX = GAME_WIDTH - r;
+    } else if (newX + r > runtime.GAME_WIDTH) {
+      finalX = runtime.GAME_WIDTH - r;
       ship.velocityX = -Math.abs(ship.velocityX) * PHYSICS.WALL_BOUNCE_FACTOR;
       hitWall = true;
     }

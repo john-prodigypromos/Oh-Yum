@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { Bolt } from '../entities/Bolt';
 import { Ship } from '../entities/Ship';
-import { WEAPONS, GAME_WIDTH, GAME_HEIGHT } from '../config';
+import { WEAPONS, runtime, GAME_HEIGHT } from '../config';
 
 export class WeaponSystem {
   private bolts: Bolt[] = [];
@@ -45,7 +45,7 @@ export class WeaponSystem {
   update(gameTime: number, delta: number = 16.67): void {
     for (let i = this.bolts.length - 1; i >= 0; i--) {
       const bolt = this.bolts[i];
-      if (!bolt.alive || bolt.isExpired(gameTime) || bolt.isOutOfBounds(GAME_WIDTH, GAME_HEIGHT)) {
+      if (!bolt.alive || bolt.isExpired(gameTime) || bolt.isOutOfBounds(runtime.GAME_WIDTH, GAME_HEIGHT)) {
         bolt.destroy();
         this.bolts.splice(i, 1);
       } else {
