@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { COLORS, getGameSize } from '../config';
 import { CharacterName, CHARACTERS, setCharacter } from '../state/Character';
+import { resetLevelState } from '../state/LevelState';
 import { createStarfieldTexture } from '../ui/Starfield';
 
 export class CharacterSelectScene extends Phaser.Scene {
@@ -40,9 +41,10 @@ export class CharacterSelectScene extends Phaser.Scene {
   }
 
   private createCharacterCard(name: CharacterName, cx: number, top: number): void {
+    const { w } = getGameSize(this);
     const cfg = CHARACTERS[name];
-    const cardW = 320;
-    const cardH = 520;
+    const cardW = Math.min(260, Math.round(w * 0.35));
+    const cardH = Math.min(280, Math.round(cardW * 1.08));
     const cardX = cx - cardW / 2;
 
     // Card background — thick bold border
@@ -55,7 +57,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     gfx.strokeRect(cardX, top, cardW, cardH);
 
     // Portrait — rendered pixelated
-    const portraitSize = 300;
+    const portraitSize = Math.min(150, Math.round(cardW * 0.55));
     const pixelSize = 64;
     const portrait = this.add.image(cx, top + 30 + portraitSize / 2, cfg.imageKey);
 
@@ -163,6 +165,7 @@ export class CharacterSelectScene extends Phaser.Scene {
 
   private selectCharacter(name: CharacterName): void {
     setCharacter(name);
-    this.scene.start('Arena');
+    resetLevelState();
+    this.scene.start('LevelIntro');
   }
 }

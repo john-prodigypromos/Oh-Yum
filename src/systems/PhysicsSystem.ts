@@ -4,7 +4,7 @@ import { dragPerStep } from '../utils/math';
 
 export interface InputState {
   rotateDir: number;   // -1, 0, or 1
-  thrust: number;      // 0 or 1
+  thrust: number;      // -1 to 1 (negative = reverse at half speed)
 }
 
 export class PhysicsSystem {
@@ -35,8 +35,10 @@ export class PhysicsSystem {
             const rotSpeed = PHYSICS.ROTATION_SPEED * ship.rotationMult;
             ship.rotation += rotSpeed * input.rotateDir * this.dt;
           }
-          if (input.thrust > 0) {
-            const thrustForce = PHYSICS.THRUST * ship.speedMult * input.thrust;
+          if (input.thrust !== 0) {
+            // Reverse thrust at half power
+            const multiplier = input.thrust < 0 ? 0.5 : 1;
+            const thrustForce = PHYSICS.THRUST * ship.speedMult * Math.abs(input.thrust) * multiplier * Math.sign(input.thrust);
             ship.velocityX += Math.cos(ship.rotation) * thrustForce * this.dt;
             ship.velocityY += Math.sin(ship.rotation) * thrustForce * this.dt;
           }

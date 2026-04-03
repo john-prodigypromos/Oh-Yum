@@ -343,6 +343,175 @@ export class SoundSystem {
     this.thrusting = false;
   }
 
+  // ── Background Music: retro chiptune loop ──
+  private musicPlaying = false;
+  private musicTimer: ReturnType<typeof setInterval> | null = null;
+  private musicNodes: (OscillatorNode | GainNode | BiquadFilterNode)[] = [];
+
+  startMusic(): void {
+    if (this.musicPlaying) return;
+    const ctx = this.ensureCtx();
+    if (!ctx || !this.masterGain) return;
+    this.musicPlaying = true;
+
+    // Music gain — audible but not overpowering SFX
+    const musicGain = ctx.createGain();
+    musicGain.gain.value = 0.25;
+    musicGain.connect(this.masterGain);
+    this.musicNodes.push(musicGain);
+
+    const bpm = 140;
+    const stepTime = 60 / bpm / 2; // 16th notes
+
+    // ── Bass line (square wave, deep) ──
+    //    Am - F - C - G progression, 2 bars loop
+    const bassNotes = [
+      110, 110, 0, 110, 87, 87, 0, 87,      // Am, F
+      131, 131, 0, 131, 98, 98, 0, 98,       // C, G
+      110, 110, 0, 110, 87, 87, 0, 87,       // Am, F
+      131, 131, 0, 131, 98, 0, 110, 0,       // C, G (variation)
+    ];
+
+    // ── Lead melody (triangle wave) ──
+    const leadNotes = [
+      330, 0, 392, 440, 0, 392, 330, 0,      // E4, G4, A4 motif
+      349, 0, 330, 262, 0, 294, 330, 0,      // F4, E4, C4, D4
+      330, 0, 392, 440, 0, 523, 440, 392,    // ascending run
+      349, 330, 0, 294, 262, 0, 0, 0,        // descending resolve
+    ];
+
+    // ── Arpeggio (pulse wave feel via detuned square) ──
+    const arpNotes = [
+      220, 262, 330, 262, 175, 220, 262, 220,
+      262, 330, 392, 330, 196, 247, 294, 247,
+      220, 262, 330, 262, 175, 220, 262, 220,
+      262, 330, 392, 330, 196, 247, 294, 0,
+    ];
+
+    let step = 0;
+    const totalSteps = bassNotes.length;
+
+    const playStep = () => {
+      if (!this.musicPlaying || !this.ctx) return;
+      const now = this.ctx.currentTime;
+      const i = step % totalSteps;
+
+      // Bass
+      if (bassNotes[i] > 0) {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        const f = this.lpf(ctx, 350);
+        osc.type = 'square';
+        osc.frequency.value = bassNotes[i] / 2; // one octave lower
+        g.gain.setValueAtTime(0.3, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + stepTime * 0.9);
+        osc.connect(f);
+        f.connect(g);
+        g.connect(musicGain);
+        osc.start(now);
+        osc.stop(now + stepTime * 0.9);
+      }
+
+      // Lead
+      if (leadNotes[i] > 0) {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        const f = this.lpf(ctx, 1200);
+        osc.type = 'triangle';
+        osc.frequency.value = leadNotes[i];
+        g.gain.setValueAtTime(0.2, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + stepTime * 0.85);
+        osc.connect(f);
+        f.connect(g);
+        g.connect(musicGain);
+        osc.start(now);
+        osc.stop(now + stepTime * 0.85);
+      }
+
+      // Arpeggio
+      if (arpNotes[i] > 0) {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        const f = this.lpf(ctx, 900);
+        osc.type = 'square';
+        osc.frequency.value = arpNotes[i];
+        g.gain.setValueAtTime(0.08, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + stepTime * 0.6);
+        osc.connect(f);
+        f.connect(g);
+        g.connect(musicGain);
+        osc.start(now);
+        osc.stop(now + stepTime * 0.6);
+      }
+
+      step++;
+    };
+
+    // Schedule steps via setInterval (simple, works well for chiptune)
+    playStep();
+    this.musicTimer = setInterval(playStep, stepTime * 1000);
+  }
+
+  isMusicPlaying(): boolean {
+    return this.musicPlaying;
+  }
+
+  stopMusic(): void {
+    this.musicPlaying = false;
+    if (this.musicTimer) {
+      clearInterval(this.musicTimer);
+      this.musicTimer = null;
+    }
+    // Clean up any lingering gain nodes
+    this.musicNodes = [];
+  }
+
+  // ── "YAY!" — loud bright 3-note celebration chirp ──
+  yay(): void {
+    const ctx = this.ensureCtx();
+    if (!ctx || !this.masterGain) return;
+    const now = ctx.currentTime;
+
+    // Three bright ascending chirps: "Ya-Ya-YAY!"
+    const chirps = [
+      { freq: 523, time: 0, dur: 0.12 },      // C5
+      { freq: 659, time: 0.15, dur: 0.12 },    // E5
+      { freq: 880, time: 0.30, dur: 0.35 },    // A5 (held longer)
+    ];
+
+    for (const chirp of chirps) {
+      const t = now + chirp.time;
+
+      // Main bright tone
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'square';
+      osc.frequency.setValueAtTime(chirp.freq, t);
+      osc.frequency.exponentialRampToValueAtTime(chirp.freq * 1.05, t + chirp.dur * 0.5);
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.4, t + 0.015);
+      gain.gain.setValueAtTime(0.4, t + chirp.dur * 0.6);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + chirp.dur);
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+      osc.start(t);
+      osc.stop(t + chirp.dur);
+
+      // Octave below for body
+      const sub = ctx.createOscillator();
+      const subGain = ctx.createGain();
+      sub.type = 'triangle';
+      sub.frequency.value = chirp.freq / 2;
+      subGain.gain.setValueAtTime(0, t);
+      subGain.gain.linearRampToValueAtTime(0.3, t + 0.015);
+      subGain.gain.exponentialRampToValueAtTime(0.001, t + chirp.dur);
+      sub.connect(subGain);
+      subGain.connect(this.masterGain);
+      sub.start(t);
+      sub.stop(t + chirp.dur);
+    }
+  }
+
   // ── Victory: deep warm ascending tones ──
   victory(): void {
     const ctx = this.ensureCtx();
@@ -442,6 +611,80 @@ export class SoundSystem {
     rumbleGain.connect(this.masterGain!);
     rumble.start(now + 1.2);
     rumble.stop(now + 2.0);
+  }
+
+  // ── Level start: two ascending bass notes ──
+  levelStart(): void {
+    const ctx = this.ensureCtx();
+    if (!ctx || !this.masterGain) return;
+    const now = ctx.currentTime;
+
+    const notes = [131, 196]; // C3, G3
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = this.lpf(ctx, 700);
+      osc.type = 'triangle';
+      const t = now + i * 0.15;
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.2, t + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain!);
+      osc.start(t);
+      osc.stop(t + 0.4);
+
+      const sub = ctx.createOscillator();
+      const subGain = ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(freq / 2, t);
+      subGain.gain.setValueAtTime(0, t);
+      subGain.gain.linearRampToValueAtTime(0.15, t + 0.04);
+      subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+      sub.connect(subGain);
+      subGain.connect(this.masterGain!);
+      sub.start(t);
+      sub.stop(t + 0.4);
+    });
+  }
+
+  // ── Level complete: short rising fanfare ──
+  levelComplete(): void {
+    const ctx = this.ensureCtx();
+    if (!ctx || !this.masterGain) return;
+    const now = ctx.currentTime;
+
+    const notes = [196, 262]; // G3, C4
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      const filter = this.lpf(ctx, 800);
+      osc.type = 'triangle';
+      const t = now + i * 0.12;
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.18, t + 0.03);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain!);
+      osc.start(t);
+      osc.stop(t + 0.35);
+
+      const sub = ctx.createOscillator();
+      const subGain = ctx.createGain();
+      sub.type = 'sine';
+      sub.frequency.setValueAtTime(freq / 2, t);
+      subGain.gain.setValueAtTime(0, t);
+      subGain.gain.linearRampToValueAtTime(0.12, t + 0.03);
+      subGain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      sub.connect(subGain);
+      subGain.connect(this.masterGain!);
+      sub.start(t);
+      sub.stop(t + 0.35);
+    });
   }
 
   // ── Defeat: deep descending tones ──

@@ -9,18 +9,19 @@ import { AIBehavior } from '../ai/AIBehavior';
 import { SHIP, PHYSICS, COLORS, getGameSize } from '../config';
 import { currentDifficulty, DIFFICULTY } from '../state/Difficulty';
 import { currentCharacter, CHARACTERS } from '../state/Character';
+import { getCurrentLevel, carryOverHull, carryOverShield, advanceLevel, isLastLevel, totalScore, resetLevelState } from '../state/LevelState';
 import { createStarfieldTexture } from '../ui/Starfield';
 import { TouchControls } from '../ui/TouchControls';
 import { SoundSystem } from '../systems/SoundSystem';
 
 export class ArenaScene extends Phaser.Scene {
   private player!: Ship;
-  private enemy!: Ship;
+  private enemies: Ship[] = [];
+  private aiBehaviors: AIBehavior[] = [];
   private physicsSystem!: PhysicsSystem;
   private weapons!: WeaponSystem;
   private damageSystem!: DamageSystem;
   private hud!: HUDSystem;
-  private aiBehavior!: AIBehavior;
   private touchControls!: TouchControls;
   private sound_sys!: SoundSystem;
 
@@ -31,6 +32,7 @@ export class ArenaScene extends Phaser.Scene {
   private score = 0;
   private matchStartTime = 0;
   private matchOver = false;
+  private explodedEnemies = new Set<Ship>();
 
   constructor() {
     super({ key: 'Arena' });
@@ -38,6 +40,16 @@ export class ArenaScene extends Phaser.Scene {
 
   create(): void {
     const { w, h } = getGameSize(this);
+    const level = getCurrentLevel();
+    const diff = DIFFICULTY[currentDifficulty];
+
+    // Reset per-match state
+    this.enemies = [];
+    this.aiBehaviors = [];
+    this.explodedEnemies = new Set();
+    this.score = totalScore; // carry cumulative score
+    this.matchStartTime = this.time.now;
+    this.matchOver = false;
 
     createStarfieldTexture(this, 'starfield');
     this.add.image(w / 2, h / 2, 'starfield');
@@ -53,10 +65,7 @@ export class ArenaScene extends Phaser.Scene {
     this.weapons = new WeaponSystem();
     this.damageSystem = new DamageSystem();
 
-    // Difficulty settings
-    const diff = DIFFICULTY[currentDifficulty];
-
-    // Player
+    // Player — use carry-over health if available
     const playerConfig: ShipConfig = {
       hull: diff.playerHull,
       shield: diff.playerShield,
@@ -68,19 +77,15 @@ export class ArenaScene extends Phaser.Scene {
     this.player = new Ship(this, w * 0.3, h * 0.7, playerConfig);
     this.player.rotation = -Math.PI / 2;
 
-    // Enemy (Rusty) — scaled by difficulty
-    const enemyConfig: ShipConfig = {
-      hull: diff.enemyHull,
-      shield: diff.enemyShield,
-      speedMult: diff.enemySpeedMult,
-      rotationMult: diff.enemyRotationMult,
-      textureKey: 'ship_enemy',
-      hitboxRadius: SHIP.HITBOX_RADIUS,
-    };
-    this.enemy = new Ship(this, w * 0.7, h * 0.3, enemyConfig);
-    this.enemy.rotation = Math.PI / 2;
+    // Apply carry-over from previous level
+    if (carryOverHull !== null) {
+      this.player.hull = carryOverHull;
+    }
+    if (carryOverShield !== null) {
+      this.player.shield = carryOverShield;
+    }
 
-    // Damage smoke emitters
+    // Player smoke emitter
     this.player.smokeEmitter = this.add.particles(0, 0, 'particle_smoke', {
       speed: { min: 10, max: 40 },
       scale: { start: 0.6, end: 0 },
@@ -91,18 +96,40 @@ export class ArenaScene extends Phaser.Scene {
     });
     this.player.smokeEmitter.setDepth(45);
 
-    this.enemy.smokeEmitter = this.add.particles(0, 0, 'particle_smoke', {
-      speed: { min: 10, max: 40 },
-      scale: { start: 0.6, end: 0 },
-      alpha: { start: 0.5, end: 0 },
-      lifespan: { min: 300, max: 800 },
-      tint: [0xff6600, 0x444444, 0x222222],
-      emitting: false,
-    });
-    this.enemy.smokeEmitter.setDepth(45);
+    // Spawn enemies based on level config
+    const enemySpawnPoints = [
+      { x: w * 0.7, y: h * 0.3 },
+      { x: w * 0.3, y: h * 0.2 },
+      { x: w * 0.8, y: h * 0.6 },
+    ];
 
-    // AI
-    this.aiBehavior = new RustyBehavior();
+    for (let i = 0; i < level.enemyCount; i++) {
+      const spawn = enemySpawnPoints[i];
+      const enemyConfig: ShipConfig = {
+        hull: diff.enemyHull,
+        shield: diff.enemyShield,
+        speedMult: diff.enemySpeedMult * level.enemySpeedBonus,
+        rotationMult: diff.enemyRotationMult * level.enemyRotationBonus,
+        textureKey: 'ship_enemy',
+        hitboxRadius: SHIP.HITBOX_RADIUS,
+      };
+      const enemy = new Ship(this, spawn.x, spawn.y, enemyConfig);
+      enemy.rotation = Math.PI / 2;
+
+      // Smoke emitter per enemy
+      enemy.smokeEmitter = this.add.particles(0, 0, 'particle_smoke', {
+        speed: { min: 10, max: 40 },
+        scale: { start: 0.6, end: 0 },
+        alpha: { start: 0.5, end: 0 },
+        lifespan: { min: 300, max: 800 },
+        tint: [0xff6600, 0x444444, 0x222222],
+        emitting: false,
+      });
+      enemy.smokeEmitter.setDepth(45);
+
+      this.enemies.push(enemy);
+      this.aiBehaviors.push(new RustyBehavior());
+    }
 
     // HUD
     this.hud = new HUDSystem(this);
@@ -120,21 +147,32 @@ export class ArenaScene extends Phaser.Scene {
     // Touch controls (auto-detected)
     this.touchControls = new TouchControls(this);
 
-    // Sound system (init on first user interaction)
+    // Sound system — try to start music immediately, retry on user gesture if needed
     this.sound_sys = new SoundSystem();
-    this.input.once('pointerdown', () => this.sound_sys.init());
-    this.input.keyboard!.once('keydown', () => this.sound_sys.init());
+    this.sound_sys.init();
+    this.sound_sys.startMusic();
 
-    this.score = 0;
-    this.matchStartTime = this.time.now;
-    this.matchOver = false;
+    // Persistent retry on interaction until music is playing (AudioContext may be suspended)
+    let musicRetried = false;
+    const retryMusic = () => {
+      if (musicRetried) return;
+      this.sound_sys.init();
+      if (!this.sound_sys.isMusicPlaying()) {
+        this.sound_sys.startMusic();
+      }
+      if (this.sound_sys.isMusicPlaying()) {
+        musicRetried = true;
+      }
+    };
+    this.input.on('pointerdown', retryMusic);
+    this.input.keyboard!.on('keydown', retryMusic);
   }
 
   update(_time: number, delta: number): void {
     if (this.matchOver) return;
 
     const now = this.time.now;
-    const ships = [this.player, this.enemy];
+    const allShips = [this.player, ...this.enemies];
 
     // Merge keyboard + touch input
     const touch = this.touchControls.getInput();
@@ -146,11 +184,12 @@ export class ArenaScene extends Phaser.Scene {
     if (this.cursors.left.isDown || this.wasd.a.isDown) rotateDir = -1;
     if (this.cursors.right.isDown || this.wasd.d.isDown) rotateDir = 1;
     if (this.cursors.up.isDown || this.wasd.w.isDown) thrust = 1;
+    if (this.cursors.down.isDown || this.wasd.s.isDown) thrust = -1;
     if (this.fireKey.isDown) fire = true;
 
     // Touch (merge — touch overrides if active)
     if (touch.rotateDir !== 0) rotateDir = touch.rotateDir;
-    if (touch.thrust > 0) thrust = touch.thrust;
+    if (touch.thrust !== 0) thrust = touch.thrust;
     if (touch.fire) fire = true;
 
     this.physicsSystem.setInput(this.player, { rotateDir, thrust });
@@ -165,20 +204,25 @@ export class ArenaScene extends Phaser.Scene {
       this.sound_sys.startThrust();
     } else {
       this.sound_sys.stopThrust();
+      this.sound_sys.stopMusic();
     }
 
     // Draw touch controls overlay
     this.touchControls.draw();
 
-    // AI (track bolt count to detect enemy firing)
-    const boltsBefore = this.weapons.getBolts().length;
-    this.aiBehavior.update(this.enemy, this.player, delta, this, this.weapons, this.physicsSystem, now);
-    if (this.weapons.getBolts().length > boltsBefore) {
-      this.sound_sys.enemyShoot();
+    // AI for each enemy
+    for (let i = 0; i < this.enemies.length; i++) {
+      const enemy = this.enemies[i];
+      if (!enemy.alive) continue;
+      const boltsBefore = this.weapons.getBolts().length;
+      this.aiBehaviors[i].update(enemy, this.player, delta, this, this.weapons, this.physicsSystem, now);
+      if (this.weapons.getBolts().length > boltsBefore) {
+        this.sound_sys.enemyShoot();
+      }
     }
 
     // Physics (returns wall hits for damage)
-    const { wallHits } = this.physicsSystem.update(delta, ships, now);
+    const { wallHits } = this.physicsSystem.update(delta, allShips, now);
     for (const ship of wallHits) {
       if (!ship.isInvincible(now)) {
         ship.applyDamage(PHYSICS.WALL_DAMAGE, false, now);
@@ -189,19 +233,22 @@ export class ArenaScene extends Phaser.Scene {
     // Bolt lifecycle
     this.weapons.update(now, delta);
 
-    // Damage: bolts vs ships
+    // Damage: bolts vs each enemy
     const bolts = this.weapons.getBolts();
-
-    const enemyHits = this.damageSystem.checkBoltHits(bolts, this.enemy, 'enemy', now);
-    for (const bolt of enemyHits) {
-      const hadShield = this.enemy.shield > 0;
-      this.damageSystem.applyBoltDamage(this.enemy, bolt, now);
-      const hullDamage = hadShield && this.enemy.shield >= 0 ? 0 : bolt.damage;
-      this.score += hullDamage > 0 ? 10 : 0;
-      hadShield && this.enemy.shield > 0 ? this.sound_sys.shieldHit() : this.sound_sys.hullHit();
-      bolt.destroy();
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      const enemyHits = this.damageSystem.checkBoltHits(bolts, enemy, 'enemy', now);
+      for (const bolt of enemyHits) {
+        const hadShield = enemy.shield > 0;
+        this.damageSystem.applyBoltDamage(enemy, bolt, now);
+        const hullDamage = hadShield && enemy.shield >= 0 ? 0 : bolt.damage;
+        this.score += hullDamage > 0 ? 10 : 0;
+        hadShield && enemy.shield > 0 ? this.sound_sys.shieldHit() : this.sound_sys.hullHit();
+        bolt.destroy();
+      }
     }
 
+    // Damage: bolts vs player
     const playerHits = this.damageSystem.checkBoltHits(bolts, this.player, 'player', now);
     for (const bolt of playerHits) {
       const hadShield = this.player.shield > 0;
@@ -210,37 +257,54 @@ export class ArenaScene extends Phaser.Scene {
       bolt.destroy();
     }
 
-    // Ship collision
-    const collided = this.damageSystem.checkShipCollision(this.player, this.enemy, now);
-    if (collided) this.sound_sys.shipCollision();
+    // Ship collisions (all pairs)
+    if (this.damageSystem.checkAllShipCollisions(this.player, this.enemies, now)) {
+      this.sound_sys.shipCollision();
+    }
 
-    // Shield regen
+    // Shield regen + damage visuals for all ships
     this.player.updateShieldRegen(now);
-    this.enemy.updateShieldRegen(now);
-
-    // Damage visuals (tint, warp, smoke)
     this.player.updateDamageVisuals(now);
-    this.enemy.updateDamageVisuals(now);
-
-    // I-frame flicker (alpha only — damage tint applied above)
     this.player.sprite.setAlpha(this.player.isInvincible(now) ? (Math.sin(now * 0.02) > 0 ? 1 : 0.3) : 1);
-    this.enemy.sprite.setAlpha(this.enemy.isInvincible(now) ? (Math.sin(now * 0.02) > 0 ? 1 : 0.3) : 1);
 
-    // Win/Lose
-    if (!this.enemy.alive) {
-      this.spawnExplosion(this.enemy.sprite.x, this.enemy.sprite.y);
-      this.sound_sys.explosion();
+    for (const enemy of this.enemies) {
+      if (!enemy.alive) continue;
+      enemy.updateShieldRegen(now);
+      enemy.updateDamageVisuals(now);
+      enemy.sprite.setAlpha(enemy.isInvincible(now) ? (Math.sin(now * 0.02) > 0 ? 1 : 0.3) : 1);
+    }
+
+    // Per-enemy explosions — trigger when each enemy dies
+    for (const enemy of this.enemies) {
+      if (!enemy.alive && !this.explodedEnemies.has(enemy)) {
+        this.explodedEnemies.add(enemy);
+        this.spawnExplosion(enemy.sprite.x, enemy.sprite.y);
+        this.sound_sys.explosion();
+        this.score += 500;
+        // Hide dead enemy sprite
+        enemy.sprite.setVisible(false);
+        if (enemy.smokeEmitter) enemy.smokeEmitter.stop();
+      }
+    }
+
+    // Win: all enemies dead
+    if (this.enemies.every(e => !e.alive)) {
       this.sound_sys.stopThrust();
+      this.sound_sys.stopMusic();
       this.endMatch('win', now);
-    } else if (!this.player.alive) {
+    }
+    // Lose: player dead
+    else if (!this.player.alive) {
       this.spawnExplosion(this.player.sprite.x, this.player.sprite.y);
       this.sound_sys.explosion();
       this.sound_sys.stopThrust();
+      this.sound_sys.stopMusic();
       this.endMatch('lose', now);
     }
 
     // HUD
-    this.hud.update(this.player, this.enemy, this.score);
+    const level = getCurrentLevel();
+    this.hud.update(this.player, this.enemies, this.score, level.level);
   }
 
   private spawnExplosion(x: number, y: number): void {
@@ -266,12 +330,64 @@ export class ArenaScene extends Phaser.Scene {
   private endMatch(result: 'win' | 'lose', now: number): void {
     this.matchOver = true;
 
-    // Victory/defeat jingle (delayed slightly so explosion plays first)
+    const { w, h } = getGameSize(this);
+
+    if (result === 'win' && !isLastLevel()) {
+      // ── Level complete — advance to next level ──
+      const elapsedSec = Math.floor((now - this.matchStartTime) / 1000);
+      const timeBonus = Math.max(0, 5000 - elapsedSec * 50);
+      this.score += timeBonus + 1000;
+
+      // Store carry-over and advance
+      advanceLevel(this.player.hull, this.player.maxHull, this.player.maxShield, this.score - totalScore);
+
+      this.time.delayedCall(600, () => {
+        this.sound_sys.levelComplete();
+      });
+
+      // Brief "LEVEL COMPLETE" overlay
+      const bannerBg = this.add.graphics();
+      bannerBg.setDepth(199);
+      bannerBg.fillStyle(0x000000, 0.7);
+      bannerBg.fillRect(0, h / 2 - 50, w, 100);
+
+      const completeText = this.add.text(w / 2, h / 2, 'LEVEL COMPLETE!', {
+        fontSize: '36px',
+        fontFamily: 'Arial, sans-serif',
+        fontStyle: 'bold',
+        color: '#00ff66',
+        stroke: '#000000',
+        strokeThickness: 4,
+      }).setOrigin(0.5, 0.5).setDepth(200).setAlpha(0);
+
+      this.tweens.add({
+        targets: completeText,
+        alpha: 1,
+        duration: 400,
+        ease: 'Power2',
+      });
+
+      // Transition to next level intro after 1.5s
+      this.time.delayedCall(1500, () => {
+        this.weapons.clear();
+        this.hud.destroy();
+        this.touchControls.destroy();
+        this.sound_sys.stopThrust();
+      this.sound_sys.stopMusic();
+        this.scene.start('LevelIntro');
+      });
+
+      return;
+    }
+
+    // ── Final win or lose — full overlay ──
+
+    // Victory/defeat jingle
     this.time.delayedCall(600, () => {
       result === 'win' ? this.sound_sys.victory() : this.sound_sys.defeat();
     });
 
-    // Scoring bonuses on win
+    // Scoring bonuses on final win
     if (result === 'win') {
       const elapsedSec = Math.floor((now - this.matchStartTime) / 1000);
       const timeBonus = Math.max(0, 5000 - elapsedSec * 50);
@@ -279,33 +395,24 @@ export class ArenaScene extends Phaser.Scene {
       this.score += timeBonus + winBonus;
     }
 
-    // Full-screen overlay
-    const { w, h } = getGameSize(this);
     const bannerBg = this.add.graphics();
     bannerBg.setDepth(199);
 
     if (result === 'lose') {
-      // Dark overlay for Kip's face
       bannerBg.fillStyle(0x000000, 0.8);
       bannerBg.fillRect(0, 0, w, h);
 
-      // Kip's face — large and menacing
       const kipFace = this.add.image(w / 2, h / 2 - 60, 'villain_kip');
       const kipScale = 280 / Math.max(kipFace.width, kipFace.height);
       kipFace.setScale(kipScale);
       kipFace.setDepth(200);
       kipFace.setAlpha(0);
 
-      // Red border around Kip
       const kipBorder = this.add.graphics();
       kipBorder.setDepth(199);
       kipBorder.lineStyle(3, 0xff2200, 0.8);
-      kipBorder.strokeRect(
-        w / 2 - 145, h / 2 - 60 - 145,
-        290, 290
-      );
+      kipBorder.strokeRect(w / 2 - 145, h / 2 - 60 - 145, 290, 290);
 
-      // Fade Kip in dramatically
       this.tweens.add({
         targets: kipFace,
         alpha: 1,
@@ -314,16 +421,13 @@ export class ArenaScene extends Phaser.Scene {
         ease: 'Power2',
       });
 
-      // Evil laugh after a beat
       this.time.delayedCall(400, () => {
         this.sound_sys.evilLaugh();
       });
     } else {
-      // Dark overlay for winner's face
       bannerBg.fillStyle(0x000000, 0.8);
       bannerBg.fillRect(0, 0, w, h);
 
-      // Show the player's character face
       const charCfg = CHARACTERS[currentCharacter];
       const heroFace = this.add.image(w / 2, h / 2 - 100, charCfg.imageKey);
       const heroScale = 240 / Math.max(heroFace.width, heroFace.height);
@@ -331,22 +435,61 @@ export class ArenaScene extends Phaser.Scene {
       heroFace.setDepth(200);
       heroFace.setAlpha(0);
 
-      // Character color border
       const heroBorder = this.add.graphics();
       heroBorder.setDepth(199);
       heroBorder.lineStyle(4, charCfg.color, 1);
-      heroBorder.strokeRect(
-        w / 2 - 125, h / 2 - 100 - 125,
-        250, 250
-      );
+      heroBorder.strokeRect(w / 2 - 125, h / 2 - 100 - 125, 250, 250);
 
-      // Fade in heroically
+      // Fade in, then joyful bounce
       this.tweens.add({
         targets: heroFace,
         alpha: 1,
         scale: heroScale * 1.05,
-        duration: 800,
+        duration: 600,
         ease: 'Power2',
+        onComplete: () => {
+          // Bounce loop — excited wobble
+          this.tweens.add({
+            targets: heroFace,
+            scaleX: heroScale * 1.15,
+            scaleY: heroScale * 0.95,
+            y: h / 2 - 108,
+            duration: 200,
+            ease: 'Sine.easeInOut',
+            yoyo: true,
+            repeat: 3,
+          });
+        },
+      });
+
+      // Big "YAY!" text pops in
+      const yayText = this.add.text(w / 2, h / 2 - 100 - 145, 'YAY!', {
+        fontSize: '48px',
+        fontFamily: 'Arial, sans-serif',
+        fontStyle: 'bold',
+        color: '#ffff00',
+        stroke: '#000000',
+        strokeThickness: 5,
+      }).setOrigin(0.5, 0.5).setDepth(202).setScale(0).setAlpha(0);
+
+      this.time.delayedCall(700, () => {
+        this.tweens.add({
+          targets: yayText,
+          scale: 1,
+          alpha: 1,
+          duration: 300,
+          ease: 'Back.easeOut',
+        });
+        // Slight rotation wobble on the YAY text
+        this.tweens.add({
+          targets: yayText,
+          angle: { from: -8, to: 8 },
+          duration: 150,
+          yoyo: true,
+          repeat: 2,
+          delay: 300,
+        });
+        this.sound_sys.yay();
       });
     }
 
@@ -394,6 +537,8 @@ export class ArenaScene extends Phaser.Scene {
       this.hud.destroy();
       this.touchControls.destroy();
       this.sound_sys.stopThrust();
+      this.sound_sys.stopMusic();
+      resetLevelState();
       this.scene.start('Title');
     };
     this.input.keyboard!.once('keydown-ENTER', goToTitle);

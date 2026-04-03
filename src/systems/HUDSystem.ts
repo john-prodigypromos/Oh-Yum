@@ -17,6 +17,7 @@ export class HUDSystem {
   private portrait: Phaser.GameObjects.Image;
   private portraitBorder: Phaser.GameObjects.Graphics;
   private pilotName: Phaser.GameObjects.Text;
+  private levelText: Phaser.GameObjects.Text;
 
   constructor(scene: Phaser.Scene) {
     const { w, h } = getGameSize(scene);
@@ -81,6 +82,12 @@ export class HUDSystem {
       stroke: '#000000', strokeThickness: 3,
     }).setOrigin(1, 1).setDepth(100);
 
+    // ── Level indicator ──
+    this.levelText = scene.add.text(w / 2, 68, '', {
+      fontSize: '16px', fontFamily: 'Arial, sans-serif', fontStyle: 'bold',
+      color: '#ffcc00', stroke: '#000000', strokeThickness: 2,
+    }).setOrigin(0.5, 0).setDepth(100);
+
     // ── Pilot portrait (top right) ──
     const cfg = CHARACTERS[currentCharacter];
     const portraitSize = 70;
@@ -112,7 +119,7 @@ export class HUDSystem {
     }).setOrigin(0.5, 0).setDepth(100);
   }
 
-  update(player: Ship, enemy: Ship, score: number): void {
+  update(player: Ship, enemies: Ship[], score: number, level: number): void {
     this.graphics.clear();
 
     // Shield bar
@@ -122,16 +129,64 @@ export class HUDSystem {
     const hullPct = player.hull / player.maxHull;
     this.drawBar(20, 66, 260, 14, hullPct, COLORS.hull);
 
-    // Target info
-    if (enemy.alive) {
-      const hullPct = Math.round((enemy.hull / enemy.maxHull) * 100);
-      this.targetText.setText(`TGT: RUSTY\nHULL: ${hullPct}%`);
+    // Level indicator
+    this.levelText.setText(`LEVEL ${level}/3`);
+
+    // Enemy target indicators — compact display below player bars
+    const aliveCount = enemies.filter(e => e.alive).length;
+    const totalCount = enemies.length;
+
+    if (aliveCount === 0) {
+      this.targetText.setVisible(false);
     } else {
-      this.targetText.setText('TGT: DESTROYED');
+      this.targetText.setVisible(false); // keep hidden, we draw pips instead
+    }
+
+    // Draw enemy pips (small health indicators)
+    const pipStartX = 20;
+    const pipY = 90;
+    const pipW = 60;
+    const pipH = 8;
+    const pipGap = 4;
+
+    for (let i = 0; i < enemies.length; i++) {
+      const enemy = enemies[i];
+      const x = pipStartX + i * (pipW + pipGap + 20);
+
+      // Label
+      this.graphics.fillStyle(0xffffff, 0.7);
+
+      if (enemy.alive) {
+        const ePct = enemy.hull / enemy.maxHull;
+        // Background
+        this.graphics.fillStyle(0x000000, 0.5);
+        this.graphics.fillRect(x, pipY, pipW, pipH);
+        // Border
+        this.graphics.lineStyle(1, 0xff4444, 0.8);
+        this.graphics.strokeRect(x, pipY, pipW, pipH);
+        // Fill
+        const clamped = Math.max(0, Math.min(1, ePct));
+        if (clamped > 0) {
+          const color = clamped > 0.5 ? 0xff4444 : 0xff2222;
+          this.graphics.fillStyle(color, 1);
+          this.graphics.fillRect(x + 1, pipY + 1, (pipW - 2) * clamped, pipH - 2);
+        }
+      } else {
+        // Dead enemy — X mark
+        this.graphics.lineStyle(2, 0x666666, 0.6);
+        this.graphics.lineBetween(x + 2, pipY, x + pipW - 2, pipY + pipH);
+        this.graphics.lineBetween(x + 2, pipY + pipH, x + pipW - 2, pipY);
+      }
+    }
+
+    // Targets remaining text
+    if (totalCount > 1) {
+      const targetsX = pipStartX + totalCount * (pipW + pipGap + 20);
+      // Draw via graphics text isn't available, so we'll use the targetText
     }
 
     // Score
-    this.scoreText.setText(`SCORE: ${score.toLocaleString()}`);
+    this.scoreText.setText(`SCORE: ${score.toLocaleString()}  •  TARGETS: ${aliveCount}/${totalCount}`);
   }
 
   private drawBar(x: number, y: number, w: number, h: number, pct: number, color: number): void {
@@ -164,5 +219,6 @@ export class HUDSystem {
     this.portrait.destroy();
     this.portraitBorder.destroy();
     this.pilotName.destroy();
+    this.levelText.destroy();
   }
 }

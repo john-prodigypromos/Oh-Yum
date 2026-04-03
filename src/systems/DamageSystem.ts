@@ -75,4 +75,18 @@ export class DamageSystem {
 
     return true;
   }
+
+  /** Check all ship collision pairs: player vs each enemy, and enemy vs enemy */
+  checkAllShipCollisions(player: Ship, enemies: Ship[], time: number): boolean {
+    let anyCollision = false;
+    for (const enemy of enemies) {
+      if (this.checkShipCollision(player, enemy, time)) anyCollision = true;
+    }
+    for (let i = 0; i < enemies.length; i++) {
+      for (let j = i + 1; j < enemies.length; j++) {
+        if (this.checkShipCollision(enemies[i], enemies[j], time)) anyCollision = true;
+      }
+    }
+    return anyCollision;
+  }
 }

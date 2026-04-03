@@ -3,6 +3,7 @@ import { GAME_HEIGHT, runtime } from './config';
 import { BootScene } from './scenes/BootScene';
 import { TitleScene } from './scenes/TitleScene';
 import { CharacterSelectScene } from './scenes/CharacterSelectScene';
+import { LevelIntroScene } from './scenes/LevelIntroScene';
 import { ArenaScene } from './scenes/ArenaScene';
 
 // Calculate game width from the actual container, not window
@@ -37,7 +38,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false,
     },
   },
-  scene: [BootScene, TitleScene, CharacterSelectScene, ArenaScene],
+  scene: [BootScene, TitleScene, CharacterSelectScene, LevelIntroScene, ArenaScene],
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -69,7 +70,7 @@ function handleResize() {
 let resizeTimer: ReturnType<typeof setTimeout>;
 function debouncedResize() {
   clearTimeout(resizeTimer);
-  resizeTimer = setTimeout(handleResize, 150);
+  resizeTimer = setTimeout(handleResize, 300);
 }
 
 window.addEventListener('resize', debouncedResize);

@@ -5,6 +5,7 @@ import { WeaponSystem } from '../../systems/WeaponSystem';
 import { PhysicsSystem, InputState } from '../../systems/PhysicsSystem';
 import { angleDiff } from '../../utils/math';
 import { currentDifficulty, DIFFICULTY } from '../../state/Difficulty';
+import { getCurrentLevel } from '../../state/LevelState';
 
 export class RustyBehavior implements AIBehavior {
   update(
@@ -38,10 +39,12 @@ export class RustyBehavior implements AIBehavior {
 
     physics.setInput(ship, input);
 
-    // Fire when facing player — rate and range from difficulty
+    // Fire when facing player — rate and range from difficulty × level bonus
     const diffCfg = DIFFICULTY[currentDifficulty];
+    const levelCfg = getCurrentLevel();
+    const fireRate = diffCfg.enemyFireRate * levelCfg.enemyFireRateBonus;
     if (Math.abs(diff) < 0.3 && dist < diffCfg.enemyChaseRange) {
-      weapons.fireBlaster(scene, ship, 'enemy', gameTime, diffCfg.enemyFireRate);
+      weapons.fireBlaster(scene, ship, 'enemy', gameTime, fireRate);
     }
   }
 }

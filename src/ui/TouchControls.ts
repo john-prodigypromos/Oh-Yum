@@ -1,13 +1,14 @@
 // ── Touch Controls for iPad/Mobile ─────────────────────
 // Virtual joystick (left) + fire button (right)
 // Auto-detected: only shown when touch input is available.
+// All sizes and positions are viewport-relative for mobile compatibility.
 
 import Phaser from 'phaser';
 import { getGameSize } from '../config';
 
 export interface TouchInput {
   rotateDir: number;  // -1, 0, or 1
-  thrust: number;     // 0 or 1
+  thrust: number;     // -1 to 1
   fire: boolean;
 }
 
@@ -16,17 +17,18 @@ export class TouchControls {
   private graphics: Phaser.GameObjects.Graphics;
   private enabled: boolean;
 
-  // Joystick state
+  // Joystick state — sizes computed from viewport
   private joystickCenter: { x: number; y: number };
-  private joystickRadius = 70;
-  private joystickOuterRadius = 100;
+  private joystickRadius: number;
+  private joystickOuterRadius: number;
   private joystickPointer: Phaser.Input.Pointer | null = null;
   private joystickAngle = 0;
   private joystickDistance = 0;
+  private thumbRadius: number;
 
   // Fire button state
   private fireCenter: { x: number; y: number };
-  private fireRadius = 60;
+  private fireRadius: number;
   private firePressed = false;
 
   constructor(scene: Phaser.Scene) {
@@ -34,10 +36,19 @@ export class TouchControls {
     this.graphics = scene.add.graphics().setDepth(200).setAlpha(0.5);
     this.enabled = scene.sys.game.device.input.touch;
 
-    // Position: joystick bottom-left, fire button bottom-right
     const { w, h } = getGameSize(scene);
-    this.joystickCenter = { x: 140, y: h - 140 };
-    this.fireCenter = { x: w - 120, y: h - 140 };
+
+    // Scale control sizes to viewport — smaller dimension drives sizing
+    const refSize = Math.min(w, h);
+    this.joystickRadius = Math.round(refSize * 0.1);
+    this.joystickOuterRadius = Math.round(refSize * 0.14);
+    this.fireRadius = Math.round(refSize * 0.09);
+    this.thumbRadius = Math.round(refSize * 0.04);
+
+    // Position: proportional to viewport, inset from edges
+    const margin = Math.round(refSize * 0.2);
+    this.joystickCenter = { x: margin, y: h - margin };
+    this.fireCenter = { x: w - margin, y: h - margin };
 
     if (this.enabled) {
       this.setupTouchListeners();
@@ -110,10 +121,12 @@ export class TouchControls {
         rotateDir = horizontal > 0 ? 1 : -1;
       }
 
-      // Use vertical component for thrust (push up = thrust)
+      // Use vertical component for thrust (push up = forward, push down = reverse)
       const vertical = Math.sin(this.joystickAngle);
       if (vertical < -0.3) {
         thrust = 1;
+      } else if (vertical > 0.3) {
+        thrust = -1;
       }
     }
 
@@ -138,19 +151,14 @@ export class TouchControls {
       const thumbX = this.joystickCenter.x + Math.cos(this.joystickAngle) * this.joystickDistance;
       const thumbY = this.joystickCenter.y + Math.sin(this.joystickAngle) * this.joystickDistance;
       this.graphics.fillStyle(0x88aacc, 0.4);
-      this.graphics.fillCircle(thumbX, thumbY, 26);
+      this.graphics.fillCircle(thumbX, thumbY, this.thumbRadius);
       this.graphics.lineStyle(2, 0x88aacc, 0.5);
-      this.graphics.strokeCircle(thumbX, thumbY, 26);
+      this.graphics.strokeCircle(thumbX, thumbY, this.thumbRadius);
     } else {
       // Resting position
       this.graphics.fillStyle(0x88aacc, 0.2);
-      this.graphics.fillCircle(this.joystickCenter.x, this.joystickCenter.y, 26);
+      this.graphics.fillCircle(this.joystickCenter.x, this.joystickCenter.y, this.thumbRadius);
     }
-
-    // Direction labels
-    this.drawLabel('THRUST', this.joystickCenter.x, this.joystickCenter.y - this.joystickOuterRadius - 14);
-    this.drawLabel('L', this.joystickCenter.x - this.joystickOuterRadius - 10, this.joystickCenter.y);
-    this.drawLabel('R', this.joystickCenter.x + this.joystickOuterRadius + 10, this.joystickCenter.y);
 
     // ── Fire button ──
     const fireColor = this.firePressed ? 0xff4422 : 0xff6644;
@@ -160,25 +168,17 @@ export class TouchControls {
     this.graphics.lineStyle(2, fireColor, 0.5);
     this.graphics.strokeCircle(this.fireCenter.x, this.fireCenter.y, this.fireRadius);
 
-    // Fire label
-    this.drawLabel('FIRE', this.fireCenter.x, this.fireCenter.y - this.fireRadius - 14);
-
     // Crosshair inside fire button
+    const crossSize = Math.round(this.fireRadius * 0.3);
     this.graphics.lineStyle(2, fireColor, 0.4);
     this.graphics.beginPath();
-    this.graphics.moveTo(this.fireCenter.x - 18, this.fireCenter.y);
-    this.graphics.lineTo(this.fireCenter.x + 18, this.fireCenter.y);
+    this.graphics.moveTo(this.fireCenter.x - crossSize, this.fireCenter.y);
+    this.graphics.lineTo(this.fireCenter.x + crossSize, this.fireCenter.y);
     this.graphics.strokePath();
     this.graphics.beginPath();
-    this.graphics.moveTo(this.fireCenter.x, this.fireCenter.y - 18);
-    this.graphics.lineTo(this.fireCenter.x, this.fireCenter.y + 18);
+    this.graphics.moveTo(this.fireCenter.x, this.fireCenter.y - crossSize);
+    this.graphics.lineTo(this.fireCenter.x, this.fireCenter.y + crossSize);
     this.graphics.strokePath();
-  }
-
-  private drawLabel(text: string, x: number, y: number): void {
-    // Using graphics since adding text objects every frame is expensive
-    // Labels are drawn once and stay static — but for simplicity we
-    // just skip them in graphics-only mode. The UI is self-explanatory.
   }
 
   isEnabled(): boolean {

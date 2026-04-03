@@ -35,10 +35,12 @@ export class TitleScene extends Phaser.Scene {
       color: '#ffffff', stroke: '#000000', strokeThickness: 2,
     }).setOrigin(0.5, 0);
 
+    const btnStartY = Math.round(h * 0.38);
+    const btnSpacing = Math.round(h * 0.13);
     const levels: { key: DifficultyLevel; color: string; y: number; desc: string }[] = [
-      { key: 'beginner',     color: '#44ff44', y: 280, desc: 'Slow enemy  •  Extra shields  •  Relaxed pace' },
-      { key: 'intermediate', color: '#ffcc00', y: 370, desc: 'Balanced combat  •  Standard loadout' },
-      { key: 'expert',       color: '#ff4444', y: 460, desc: 'Fast & aggressive  •  Tough enemy  •  Less armor' },
+      { key: 'beginner',     color: '#44ff44', y: btnStartY, desc: 'Slow enemy  •  Extra shields  •  Relaxed pace' },
+      { key: 'intermediate', color: '#ffcc00', y: btnStartY + btnSpacing, desc: 'Balanced combat  •  Standard loadout' },
+      { key: 'expert',       color: '#ff4444', y: btnStartY + btnSpacing * 2, desc: 'Fast & aggressive  •  Tough enemy  •  Less armor' },
     ];
 
     for (const lvl of levels) {
@@ -70,7 +72,7 @@ export class TitleScene extends Phaser.Scene {
     w: number,
   ): void {
     const cfg = DIFFICULTY[level];
-    const btnW = 400;
+    const btnW = Math.min(400, Math.round(w * 0.6));
     const btnH = 60;
     const btnX = (w - btnW) / 2;
 
