@@ -130,9 +130,9 @@ export function updateArena(
 
   // ── Player input (keyboard + touch merged) ──
   const touch = touchControls.getInput();
-  const kbYaw = (keys['ArrowLeft'] || keys['KeyA'] ? -1 : 0) + (keys['ArrowRight'] || keys['KeyD'] ? 1 : 0);
-  const kbPitch = (keys['KeyQ'] ? 1 : 0) + (keys['KeyE'] ? -1 : 0);
-  const kbThrust = (keys['ArrowUp'] || keys['KeyW'] ? 1 : 0) + (keys['ArrowDown'] || keys['KeyS'] ? -1 : 0);
+  const kbYaw = (keys['ArrowLeft'] ? -1 : 0) + (keys['ArrowRight'] ? 1 : 0);
+  const kbPitch = (keys['ArrowUp'] ? 1 : 0) + (keys['ArrowDown'] ? -1 : 0);
+  const kbThrust = 1; // always thrust forward
 
   const input: ShipInput = {
     yaw: Math.max(-1, Math.min(1, kbYaw + touch.yaw)),
