@@ -33,6 +33,7 @@ export interface ArenaState {
   sound: SoundSystem;
   score: number;
   levelConfig: LevelConfig;
+  camera: THREE.PerspectiveCamera;
   gameOver: boolean;
   gameOverTime: number;
   victory: boolean;
@@ -107,8 +108,7 @@ export function createArenaState(
 
   // ── Systems ──
   const boltPool = new BoltPool(scene);
-  const explosions = new ExplosionPool(scene);
-  explosions.setCamera(camera);
+  const explosions = new ExplosionPool();
   const cockpitCam = new CockpitCamera(camera);
   const touchControls = new TouchControls3D();
   const mouseControls = new MouseControls();
@@ -119,6 +119,7 @@ export function createArenaState(
   return {
     player, enemies, enemyAIs,
     boltPool, explosions, cockpitCam, touchControls, mouseControls, sound,
+    camera,
     score: previousScore,
     levelConfig,
     gameOver: false,
@@ -207,14 +208,27 @@ export function updateArena(
       else state.sound.hullHit();
     }
 
+    // Project target position to screen for explosions
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const projected = evt.target.position.clone().project(state.camera);
+    const sx = (projected.x * 0.5 + 0.5) * w;
+    const sy = (-projected.y * 0.5 + 0.5) * h;
+    const onScreen = projected.z < 1 && sx > 0 && sx < w && sy > 0 && sy < h;
+
     // Impact flash at enemy position
-    if (!evt.target.isPlayer) {
-      explosions.spawn(evt.target.position.clone(), 60);
+    if (!evt.target.isPlayer && onScreen) {
+      explosions.spawnHit(sx, sy);
     }
 
     // DEATH: spectacular chain explosion
     if (!evt.target.alive) {
-      explosions.spawnDeathExplosion(evt.target.position.clone());
+      if (onScreen) {
+        explosions.spawnDeath(sx, sy);
+      } else {
+        // Off-screen death — show at screen center
+        explosions.spawnDeath(w / 2, h / 2);
+      }
       state.sound.explosion();
       if (!evt.target.isPlayer) {
         state.score += 500;
