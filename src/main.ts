@@ -1,106 +1,127 @@
-import Phaser from 'phaser';
-import { GAME_HEIGHT, runtime } from './config';
-import { BootScene } from './scenes/BootScene';
-import { TitleScene } from './scenes/TitleScene';
-import { CharacterSelectScene } from './scenes/CharacterSelectScene';
-import { LevelIntroScene } from './scenes/LevelIntroScene';
-import { ArenaScene } from './scenes/ArenaScene';
-import { HighScoreScene } from './scenes/HighScoreScene';
+// ── OH-YUM BLASTER 3D — Main Entry Point ────────────────
+// Three.js renderer, post-processing, scene management, animation loop.
 
-// Get the most reliable viewport dimensions available.
-// iOS Safari's getBoundingClientRect() is unreliable at startup —
-// it can return pre-layout (portrait) dimensions on a landscape screen.
-// The visualViewport API is the most accurate on iOS.
-function getViewportSize(): { width: number; height: number } {
-  if (window.visualViewport) {
-    return { width: window.visualViewport.width, height: window.visualViewport.height };
-  }
-  // document.documentElement.clientWidth excludes scrollbar, more reliable than innerWidth
-  return {
-    width: document.documentElement.clientWidth || window.innerWidth,
-    height: document.documentElement.clientHeight || window.innerHeight,
-  };
-}
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
-function getAspect(): number {
-  const { width, height } = getViewportSize();
-  if (width > 0 && height > 0) return width / height;
-  return 16 / 9; // safe fallback
-}
+// ── Globals ──
+let renderer: THREE.WebGLRenderer;
+let composer: EffectComposer;
+let scene: THREE.Scene;
+let camera: THREE.PerspectiveCamera;
+let clock: THREE.Clock;
 
-function initGame() {
-  const aspect = getAspect();
-  const gameWidth = Math.round(GAME_HEIGHT * aspect);
-  runtime.GAME_WIDTH = gameWidth;
+function init() {
+  const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
+  if (!canvas) throw new Error('Missing #game-canvas element');
 
-  const config: Phaser.Types.Core.GameConfig = {
-    type: Phaser.AUTO,
-    width: gameWidth,
-    height: GAME_HEIGHT,
-    backgroundColor: '#0a1220',
-    parent: 'game-container',
-    physics: {
-      default: 'arcade',
-      arcade: {
-        gravity: { x: 0, y: 0 },
-        debug: false,
-      },
-    },
-    scene: [BootScene, TitleScene, CharacterSelectScene, LevelIntroScene, ArenaScene, HighScoreScene],
-    scale: {
-      mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH,
-      expandParent: false,
-      width: gameWidth,
-      height: GAME_HEIGHT,
-    },
-    input: {
-      activePointers: 4,
-    },
-  };
-
-  const game = new Phaser.Game(config);
-
-  // On resize/orientation change, recalculate and resize the game
-  function handleResize() {
-    const newAspect = getAspect();
-    const newWidth = Math.round(GAME_HEIGHT * newAspect);
-
-    if (Math.abs(newWidth - game.scale.width) > 2) {
-      runtime.GAME_WIDTH = newWidth;
-      game.scale.resize(newWidth, GAME_HEIGHT);
-    }
-    game.scale.refresh();
-  }
-
-  // Debounce resize to avoid thrashing during iOS toolbar animation
-  let resizeTimer: ReturnType<typeof setTimeout>;
-  function debouncedResize() {
-    clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(handleResize, 150);
-  }
-
-  window.addEventListener('resize', debouncedResize);
-  window.addEventListener('orientationchange', () => {
-    // iOS needs extra delay after orientation change for viewport to settle
-    setTimeout(handleResize, 300);
-    setTimeout(handleResize, 600);
+  // ── Renderer ──
+  renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: false, // SMAA handles AA
+    powerPreference: 'high-performance',
   });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
 
+  // ── Scene ──
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x020508);
+
+  // ── Camera ──
+  camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    10000,
+  );
+  camera.position.set(0, 2, 10);
+  camera.lookAt(0, 0, 0);
+
+  // ── Post-Processing ──
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+
+  const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    1.5,  // strength
+    0.6,  // radius
+    0.85, // threshold
+  );
+  composer.addPass(bloomPass);
+
+  const smaaPass = new SMAAPass();
+  composer.addPass(smaaPass);
+
+  composer.addPass(new OutputPass());
+
+  // ── Temporary test content (verifies renderer + bloom) ──
+  const testGeo = new THREE.BoxGeometry(2, 2, 2);
+  const testMat = new THREE.MeshStandardMaterial({
+    color: 0x0088ff,
+    emissive: 0x0044ff,
+    emissiveIntensity: 2.0,
+    metalness: 0.9,
+    roughness: 0.3,
+  });
+  const testCube = new THREE.Mesh(testGeo, testMat);
+  scene.add(testCube);
+
+  // Light so cube is visible
+  const light = new THREE.DirectionalLight(0xfff5e6, 3);
+  light.position.set(5, 10, 7);
+  scene.add(light);
+  scene.add(new THREE.AmbientLight(0x222244, 0.3));
+
+  // ── Clock ──
+  clock = new THREE.Clock();
+
+  // ── Resize ──
+  window.addEventListener('resize', handleResize);
   if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', debouncedResize);
+    window.visualViewport.addEventListener('resize', handleResize);
   }
 
-  // iOS safety net: re-check dimensions shortly after init in case the
-  // viewport wasn't settled when we first measured.
-  setTimeout(handleResize, 100);
-  setTimeout(handleResize, 500);
+  // ── Start loop ──
+  animate();
 }
 
-// Wait for DOM to be ready before measuring viewport — iOS Safari reports
-// wrong dimensions if we measure before layout is complete.
-if (document.readyState === 'complete') {
-  initGame();
-} else {
-  window.addEventListener('load', initGame);
+function handleResize() {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
 }
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+
+  // Spin test cube
+  const cube = scene.children.find(c => c instanceof THREE.Mesh) as THREE.Mesh | undefined;
+  if (cube) {
+    cube.rotation.x += dt * 0.5;
+    cube.rotation.y += dt * 0.8;
+  }
+
+  composer.render();
+}
+
+// ── Bootstrap ──
+if (document.readyState === 'complete') {
+  init();
+} else {
+  window.addEventListener('load', init);
+}
+
+// Export for future scene manager access
+export { renderer, composer, scene, camera };
