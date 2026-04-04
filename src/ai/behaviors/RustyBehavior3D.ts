@@ -17,9 +17,9 @@ export class RustyBehavior3D implements AIBehavior3D {
   private chaseRange: number;
 
   constructor(
-    aimAccuracy = AI.RUSTY_AIM_ACCURACY,
-    fireRate = AI.RUSTY_FIRE_RATE,
-    chaseRange = AI.RUSTY_CHASE_RANGE,
+    aimAccuracy: number = AI.RUSTY_AIM_ACCURACY,
+    fireRate: number = AI.RUSTY_FIRE_RATE,
+    chaseRange: number = AI.RUSTY_CHASE_RANGE,
   ) {
     this.aimAccuracy = aimAccuracy;
     this.fireRate = fireRate;

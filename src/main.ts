@@ -1,160 +1,433 @@
 // ── OH-YUM BLASTER 3D — Main Entry Point ────────────────
-// Three.js renderer, scene management, animation loop.
+// Full game loop: title → charSelect → levelIntro → arena → highScore
 
 import * as THREE from 'three';
 import { createRenderer, handleRendererResize, type RendererBundle } from './renderer/SetupRenderer';
-import { createSpaceEnvironment, type SpaceEnvironment } from './renderer/Environment';
-import { createPlayerShipGeometry, createEnemyShipGeometry } from './ships/ShipGeometry';
-import { createPlayerMaterials, createEnemyMaterials, applyMaterials } from './ships/ShipMaterials';
-import { Ship3D } from './entities/Ship3D';
-import { CockpitCamera } from './camera/CockpitCamera';
-import { applyShipPhysics, checkShipCollision, resolveShipCollision, type ShipInput } from './systems/PhysicsSystem3D';
-import { BoltPool } from './entities/Bolt3D';
-import { tryFireWeapon } from './systems/WeaponSystem3D';
-import { processBoltDamage } from './systems/DamageSystem3D';
-import { ExplosionPool } from './entities/Explosion3D';
-import { RustyBehavior3D } from './ai/behaviors/RustyBehavior3D';
-import { SHIP } from './config';
+import { createSpaceEnvironment } from './renderer/Environment';
+import { SceneManager, type SceneState } from './state/SceneManager';
+import { createArenaState, updateArena, cleanupArena, type ArenaState } from './scenes/ArenaLoop';
+import { HUD3D } from './ui/HUD3D';
+import { setDifficulty, type DifficultyLevel } from './state/Difficulty';
+import { resetLevelState, currentLevelIndex, advanceLevel, getCurrentLevel, totalScore } from './state/LevelState';
+import { setCharacter, currentCharacter } from './state/Character';
+import { addHighScore, getHighScores } from './state/HighScores';
+import { currentDifficulty } from './state/Difficulty';
+import { COLORS } from './config';
 
 // ── Globals ──
 let bundle: RendererBundle;
-let env: SpaceEnvironment;
 let clock: THREE.Clock;
-let player: Ship3D;
-let enemy: Ship3D;
-let cockpitCam: CockpitCamera;
-let boltPool: BoltPool;
-let explosions: ExplosionPool;
-let enemyAI: RustyBehavior3D;
-
-// Input state
+let sceneManager: SceneManager;
+let arena: ArenaState | null = null;
+let hud: HUD3D | null = null;
 const keys: Record<string, boolean> = {};
+
+// ── Overlay elements ──
+let overlayEl: HTMLDivElement;
+let crosshairEl: HTMLElement;
 
 function init() {
   const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
   if (!canvas) throw new Error('Missing #game-canvas element');
 
+  overlayEl = document.getElementById('ui-overlay') as HTMLDivElement;
+  crosshairEl = document.getElementById('crosshair') as HTMLElement;
+
+  // ── Renderer + environment ──
   bundle = createRenderer(canvas);
-  env = createSpaceEnvironment(bundle.scene, bundle.renderer, bundle.camera);
+  createSpaceEnvironment(bundle.scene, bundle.renderer, bundle.camera);
 
-  // ── Player ship ──
-  const playerGeo = createPlayerShipGeometry();
-  applyMaterials(playerGeo, createPlayerMaterials(0x88aacc));
-  bundle.scene.add(playerGeo);
-
-  player = new Ship3D({
-    group: playerGeo,
-    maxHull: SHIP.PLAYER_HULL,
-    maxShield: SHIP.PLAYER_SHIELD,
-    speedMult: 1.0,
-    rotationMult: 1.0,
-    isPlayer: true,
-  });
-
-  // ── Enemy ship ──
-  const enemyGeo = createEnemyShipGeometry();
-  applyMaterials(enemyGeo, createEnemyMaterials());
-  enemyGeo.position.set(0, 0, 80);
-  bundle.scene.add(enemyGeo);
-
-  enemy = new Ship3D({
-    group: enemyGeo,
-    maxHull: 60,
-    maxShield: 0,
-    speedMult: 0.5,
-    rotationMult: 0.5,
-    isPlayer: false,
-  });
-
-  // ── Camera ──
-  cockpitCam = new CockpitCamera(bundle.camera);
-  const crosshair = document.getElementById('crosshair');
-  if (crosshair) crosshair.style.display = 'block';
-
-  // ── Bolt pool + explosions + AI ──
-  boltPool = new BoltPool(bundle.scene);
-  explosions = new ExplosionPool(bundle.scene);
-  enemyAI = new RustyBehavior3D();
+  // Start camera in a cinematic position
+  bundle.camera.position.set(0, 10, 30);
+  bundle.camera.lookAt(0, 0, 0);
 
   // ── Input ──
   window.addEventListener('keydown', (e) => { keys[e.code] = true; });
   window.addEventListener('keyup', (e) => { keys[e.code] = false; });
 
-  clock = new THREE.Clock();
-
+  // ── Resize ──
   const onResize = () => handleRendererResize(bundle);
   window.addEventListener('resize', onResize);
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', onResize);
   }
 
+  clock = new THREE.Clock();
+
+  // ── Scene Manager ──
+  sceneManager = new SceneManager({
+    onEnter: handleSceneEnter,
+    onExit: handleSceneExit,
+  });
+  sceneManager.start('title');
+
   animate();
 }
+
+// ── Scene Transitions ──
+
+function handleSceneEnter(state: SceneState, _prev: SceneState | null): void {
+  switch (state) {
+    case 'title':
+      showTitleOverlay();
+      crosshairEl.style.display = 'none';
+      break;
+    case 'charSelect':
+      showCharSelectOverlay();
+      break;
+    case 'levelIntro':
+      showLevelIntroOverlay();
+      break;
+    case 'arena':
+      startArena();
+      break;
+    case 'highScore':
+      showHighScoreOverlay();
+      break;
+    case 'gameOver':
+      showGameOverOverlay();
+      break;
+  }
+}
+
+function handleSceneExit(state: SceneState, _next: SceneState): void {
+  clearOverlay();
+  if (state === 'arena' && arena) {
+    cleanupArena(arena, bundle.scene);
+    hud?.destroy();
+    hud = null;
+    arena = null;
+    crosshairEl.style.display = 'none';
+  }
+}
+
+// ── Overlays ──
+
+function clearOverlay(): void {
+  // Remove all overlay children except the HUD
+  const children = Array.from(overlayEl.children);
+  for (const child of children) {
+    if ((child as HTMLElement).id !== 'hud') {
+      child.remove();
+    }
+  }
+}
+
+function createOverlayPanel(cssClass = 'overlay-panel'): HTMLDivElement {
+  const panel = document.createElement('div');
+  panel.className = cssClass;
+  panel.style.cssText = `
+    position:fixed;top:0;left:0;width:100%;height:100%;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(2,5,8,0.85);z-index:30;
+    font-family:Arial,sans-serif;color:#fff;
+    pointer-events:auto;
+  `;
+  overlayEl.appendChild(panel);
+  return panel;
+}
+
+function showTitleOverlay(): void {
+  const panel = createOverlayPanel();
+
+  const title = document.createElement('div');
+  title.textContent = 'OH-YUM BLASTER';
+  title.style.cssText = 'font-size:48px;font-weight:bold;letter-spacing:4px;margin-bottom:8px;';
+  panel.appendChild(title);
+
+  const sub = document.createElement('div');
+  sub.textContent = 'オー・ヤム ブラスター';
+  sub.style.cssText = 'font-size:24px;color:#aaa;margin-bottom:40px;';
+  panel.appendChild(sub);
+
+  const selectLabel = document.createElement('div');
+  selectLabel.textContent = 'SELECT DIFFICULTY';
+  selectLabel.style.cssText = 'font-size:18px;letter-spacing:2px;margin-bottom:20px;';
+  panel.appendChild(selectLabel);
+
+  const difficulties: { key: DifficultyLevel; label: string; color: string; desc: string }[] = [
+    { key: 'beginner', label: 'BEGINNER', color: '#44ff44', desc: 'Slow enemy • Extra shields • Relaxed pace' },
+    { key: 'intermediate', label: 'INTERMEDIATE', color: '#ffcc00', desc: 'Balanced combat • Standard loadout' },
+    { key: 'expert', label: 'EXPERT', color: '#ff4444', desc: 'Fast & aggressive • Tough enemy • Less armor' },
+  ];
+
+  for (const d of difficulties) {
+    const btn = document.createElement('button');
+    btn.style.cssText = `
+      display:block;width:360px;padding:14px 20px;margin:8px 0;
+      background:rgba(17,24,34,0.9);border:2px solid ${d.color};
+      color:${d.color};font-size:18px;font-weight:bold;font-family:Arial,sans-serif;
+      cursor:pointer;border-radius:4px;text-align:center;
+    `;
+    btn.textContent = d.label;
+
+    const desc = document.createElement('div');
+    desc.textContent = d.desc;
+    desc.style.cssText = 'font-size:11px;color:#ccc;font-weight:normal;margin-top:4px;';
+    btn.appendChild(desc);
+
+    btn.addEventListener('click', () => {
+      setDifficulty(d.key);
+      resetLevelState();
+      sceneManager.transition('charSelect');
+    });
+    btn.addEventListener('mouseenter', () => { btn.style.background = 'rgba(26,40,56,0.95)'; });
+    btn.addEventListener('mouseleave', () => { btn.style.background = 'rgba(17,24,34,0.9)'; });
+    panel.appendChild(btn);
+  }
+
+  // High scores
+  const scores = getHighScores();
+  if (scores.length > 0) {
+    const hsTitle = document.createElement('div');
+    hsTitle.textContent = 'HIGH SCORES';
+    hsTitle.style.cssText = 'font-size:14px;color:#ffcc00;margin-top:30px;letter-spacing:2px;';
+    panel.appendChild(hsTitle);
+
+    for (const entry of scores.slice(0, 5)) {
+      const row = document.createElement('div');
+      row.textContent = `${entry.name} — ${entry.score.toLocaleString()}`;
+      row.style.cssText = 'font-size:12px;color:#aaa;margin-top:4px;';
+      panel.appendChild(row);
+    }
+  }
+
+  const footer = document.createElement('div');
+  footer.textContent = 'PRIDAY LABS';
+  footer.style.cssText = 'position:absolute;bottom:16px;right:16px;font-size:16px;font-weight:bold;color:#00ff66;';
+  panel.appendChild(footer);
+}
+
+function showCharSelectOverlay(): void {
+  const panel = createOverlayPanel();
+
+  const title = document.createElement('div');
+  title.textContent = 'CHOOSE YOUR PILOT';
+  title.style.cssText = 'font-size:28px;font-weight:bold;letter-spacing:3px;margin-bottom:30px;';
+  panel.appendChild(title);
+
+  const chars = [
+    { id: 'owen', name: 'OWEN', tagline: 'Precision striker', color: 0x88aacc },
+    { id: 'william', name: 'WILLIAM', tagline: 'Aggressive brawler', color: 0xccaa44 },
+  ];
+
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;gap:30px;';
+
+  for (const c of chars) {
+    const card = document.createElement('button');
+    card.style.cssText = `
+      width:180px;padding:30px 20px;background:rgba(17,24,34,0.9);
+      border:2px solid #${c.color.toString(16).padStart(6, '0')};
+      color:#fff;font-family:Arial,sans-serif;cursor:pointer;border-radius:6px;
+      text-align:center;
+    `;
+
+    const name = document.createElement('div');
+    name.textContent = c.name;
+    name.style.cssText = 'font-size:22px;font-weight:bold;margin-bottom:8px;';
+    card.appendChild(name);
+
+    const tag = document.createElement('div');
+    tag.textContent = c.tagline;
+    tag.style.cssText = 'font-size:12px;color:#aaa;';
+    card.appendChild(tag);
+
+    card.addEventListener('click', () => {
+      setCharacter(c.id as 'owen' | 'william');
+      sceneManager.transition('levelIntro');
+    });
+    card.addEventListener('mouseenter', () => { card.style.background = 'rgba(26,40,56,0.95)'; });
+    card.addEventListener('mouseleave', () => { card.style.background = 'rgba(17,24,34,0.9)'; });
+    row.appendChild(card);
+  }
+
+  panel.appendChild(row);
+}
+
+function showLevelIntroOverlay(): void {
+  const panel = createOverlayPanel();
+  const level = getCurrentLevel();
+
+  const levelText = document.createElement('div');
+  levelText.textContent = `LEVEL ${level.level}`;
+  levelText.style.cssText = `
+    font-size:64px;font-weight:bold;letter-spacing:6px;
+    animation: scaleIn 0.5s ease-out;
+  `;
+  panel.appendChild(levelText);
+
+  const subtitle = document.createElement('div');
+  subtitle.textContent = level.subtitle;
+  subtitle.style.cssText = 'font-size:20px;color:#ffcc00;margin-top:12px;letter-spacing:2px;opacity:0;animation:fadeIn 0.5s 0.3s forwards;';
+  panel.appendChild(subtitle);
+
+  const enemies = document.createElement('div');
+  enemies.textContent = `${level.enemyCount} ${level.enemyCount === 1 ? 'ENEMY' : 'ENEMIES'}`;
+  enemies.style.cssText = 'font-size:14px;color:#aaa;margin-top:16px;opacity:0;animation:fadeIn 0.5s 0.5s forwards;';
+  panel.appendChild(enemies);
+
+  // Inject animations
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes scaleIn { from { transform:scale(0.3);opacity:0; } to { transform:scale(1);opacity:1; } }
+    @keyframes fadeIn { from { opacity:0; } to { opacity:1; } }
+  `;
+  document.head.appendChild(style);
+
+  // Auto-advance after 2.5s
+  setTimeout(() => {
+    if (sceneManager.current === 'levelIntro') {
+      sceneManager.transition('arena');
+    }
+  }, 2500);
+}
+
+function startArena(): void {
+  const char = currentCharacter;
+  const playerColor = char === 'william' ? 0xccaa44 : COLORS.player;
+
+  arena = createArenaState(
+    bundle.scene,
+    bundle.camera,
+    currentLevelIndex + 1,
+    totalScore,
+    playerColor,
+  );
+
+  hud = new HUD3D();
+  crosshairEl.style.display = 'block';
+}
+
+function showHighScoreOverlay(): void {
+  const panel = createOverlayPanel();
+  const finalScore = arena?.score ?? totalScore;
+
+  const title = document.createElement('div');
+  title.textContent = 'VICTORY!';
+  title.style.cssText = 'font-size:48px;font-weight:bold;color:#ffcc00;letter-spacing:4px;margin-bottom:16px;';
+  panel.appendChild(title);
+
+  const scoreText = document.createElement('div');
+  scoreText.textContent = `FINAL SCORE: ${finalScore.toLocaleString()}`;
+  scoreText.style.cssText = 'font-size:24px;margin-bottom:24px;';
+  panel.appendChild(scoreText);
+
+  // Name entry
+  const nameLabel = document.createElement('div');
+  nameLabel.textContent = 'ENTER YOUR NAME:';
+  nameLabel.style.cssText = 'font-size:14px;color:#aaa;margin-bottom:8px;';
+  panel.appendChild(nameLabel);
+
+  const nameInput = document.createElement('input');
+  nameInput.type = 'text';
+  nameInput.maxLength = 12;
+  nameInput.value = 'PILOT';
+  nameInput.style.cssText = `
+    width:200px;padding:10px;background:rgba(17,24,34,0.9);
+    border:2px solid #ffcc00;color:#fff;font-size:18px;font-family:Arial,sans-serif;
+    text-align:center;border-radius:4px;outline:none;
+  `;
+  nameInput.addEventListener('input', () => {
+    nameInput.value = nameInput.value.replace(/[^a-zA-Z0-9 ]/g, '').substring(0, 12);
+  });
+  panel.appendChild(nameInput);
+
+  const submitBtn = document.createElement('button');
+  submitBtn.textContent = 'SAVE SCORE';
+  submitBtn.style.cssText = `
+    margin-top:16px;padding:12px 32px;background:#ffcc00;color:#000;
+    font-size:16px;font-weight:bold;border:none;border-radius:4px;
+    cursor:pointer;font-family:Arial,sans-serif;
+  `;
+  submitBtn.addEventListener('click', () => {
+    const name = nameInput.value.trim() || 'PILOT';
+    addHighScore({
+      name,
+      score: finalScore,
+      level: currentLevelIndex + 1,
+      difficulty: currentDifficulty,
+      date: new Date().toISOString(),
+    });
+    sceneManager.transition('title');
+  });
+  panel.appendChild(submitBtn);
+
+  setTimeout(() => nameInput.focus(), 100);
+}
+
+function showGameOverOverlay(): void {
+  const panel = createOverlayPanel();
+
+  const title = document.createElement('div');
+  title.textContent = 'GAME OVER';
+  title.style.cssText = 'font-size:48px;font-weight:bold;color:#ff4444;letter-spacing:4px;margin-bottom:16px;';
+  panel.appendChild(title);
+
+  const scoreText = document.createElement('div');
+  scoreText.textContent = `SCORE: ${(arena?.score ?? 0).toLocaleString()}`;
+  scoreText.style.cssText = 'font-size:24px;margin-bottom:24px;';
+  panel.appendChild(scoreText);
+
+  const retryBtn = document.createElement('button');
+  retryBtn.textContent = 'PLAY AGAIN';
+  retryBtn.style.cssText = `
+    padding:14px 40px;background:rgba(17,24,34,0.9);border:2px solid #ff4444;
+    color:#ff4444;font-size:18px;font-weight:bold;font-family:Arial,sans-serif;
+    cursor:pointer;border-radius:4px;
+  `;
+  retryBtn.addEventListener('click', () => {
+    sceneManager.transition('title');
+  });
+  panel.appendChild(retryBtn);
+}
+
+// ── Animation Loop ──
 
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
   const now = performance.now();
 
-  // ── Input ──
-  const input: ShipInput = {
-    yaw: (keys['ArrowLeft'] || keys['KeyA'] ? -1 : 0) + (keys['ArrowRight'] || keys['KeyD'] ? 1 : 0),
-    pitch: (keys['KeyQ'] ? 1 : 0) + (keys['KeyE'] ? -1 : 0),
-    roll: 0,
-    thrust: (keys['ArrowUp'] || keys['KeyW'] ? 1 : 0) + (keys['ArrowDown'] || keys['KeyS'] ? -1 : 0),
-  };
+  if (sceneManager.current === 'arena' && arena) {
+    updateArena(arena, keys, dt, now);
 
-  // ── Enemy AI ──
-  const aiInput = enemyAI.update(enemy, player, dt, now);
-  if (aiInput.fire) {
-    tryFireWeapon(enemy, boltPool, now);
-  }
-
-  // ── Physics ──
-  applyShipPhysics(player, input, dt, now);
-  applyShipPhysics(enemy, aiInput, dt, now);
-
-  // ── Weapons ──
-  if (keys['Space']) {
-    tryFireWeapon(player, boltPool, now);
-  }
-  boltPool.update(dt);
-
-  // ── Bolt-to-ship damage ──
-  const damageEvents = processBoltDamage(boltPool, [player, enemy], now);
-  for (const evt of damageEvents) {
-    if (evt.target === player) {
-      cockpitCam.shake(evt.shieldHit ? 0.3 : 0.6);
+    // Update HUD
+    if (hud) {
+      hud.update(arena.player, arena.enemies, arena.score, currentLevelIndex + 1);
     }
-    // Trigger explosion at bolt impact point
-    explosions.spawn(evt.bolt.mesh.position.clone());
 
-    // If ship died, big explosion at ship position
-    if (!evt.target.alive) {
-      explosions.spawn(evt.target.position.clone());
+    // Check win/lose
+    if (arena.victory) {
+      const hasNext = advanceLevel(
+        arena.player.hull,
+        arena.player.maxHull,
+        arena.player.maxShield,
+        arena.score - totalScore,
+      );
+      if (hasNext) {
+        sceneManager.transition('levelIntro');
+      } else {
+        sceneManager.transition('highScore');
+      }
+    } else if (arena.gameOver) {
+      sceneManager.transition('gameOver');
     }
+  } else if (sceneManager.current === 'title') {
+    // Slowly rotate camera for cinematic idle
+    const t = clock.elapsedTime * 0.1;
+    bundle.camera.position.set(Math.sin(t) * 30, 10, Math.cos(t) * 30);
+    bundle.camera.lookAt(0, 0, 0);
   }
 
-  // ── Ship-to-ship collision ──
-  if (checkShipCollision(player, enemy, SHIP.HITBOX_RADIUS)) {
-    resolveShipCollision(player, enemy, SHIP.HITBOX_RADIUS, now);
-    cockpitCam.shake(0.5);
-  }
-
-  // ── Explosions ──
-  explosions.update(dt);
-
-  // ── Camera ──
-  cockpitCam.update(player, dt, input.yaw);
-
-  // ── Render ──
   bundle.composer.render();
 }
 
+// ── Bootstrap ──
 if (document.readyState === 'complete') {
   init();
 } else {
   window.addEventListener('load', init);
 }
 
-export { bundle, env };
+export { bundle };
