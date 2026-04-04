@@ -25,7 +25,7 @@ export const PHYSICS = {
 export const WEAPONS = {
   BLASTER_FIRE_RATE: 150,
   BLASTER_BOLT_SPEED: 150,  // slow enough to not skip through enemies
-  BLASTER_DAMAGE: 5,
+  BLASTER_DAMAGE: 15,  // high damage — enemies die in ~3-4 hits
   BLASTER_BOLT_LIFETIME: 2000,
   BLASTER_SPREAD: 2,  // tight spread for accurate aiming
 } as const;
@@ -35,7 +35,7 @@ export const SHIP = {
   PLAYER_SHIELD: 50,
   SHIELD_REGEN_DELAY: 5000,
   SHIELD_REGEN_RATE: 2,
-  IFRAMES: 500,
+  IFRAMES: 100,  // short i-frames so rapid fire works
   KNOCKBACK_FORCE: 200,
   HITBOX_RADIUS: 12,  // generous hitbox — bolts visibly hit enemies
 } as const;

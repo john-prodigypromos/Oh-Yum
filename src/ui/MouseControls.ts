@@ -16,7 +16,7 @@ export class MouseControls {
   // Dead zone in center (fraction of screen half-width/height)
   private deadZone = 0.05;
   // Sensitivity — how far from center = full turn (fraction of screen)
-  private sensitivity = 0.4;
+  private sensitivity = 0.6;  // less sensitive — 35% reduction
 
   constructor() {
     // Only enable on non-touch devices

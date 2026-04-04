@@ -34,9 +34,9 @@ export class RustyBehavior3D implements AIBehavior3D {
 
     // Position: always 15 units ahead of where the player is looking
     const playerForward = target.getForward();
-    const desiredX = target.position.x + playerForward.x * 15 + Math.sin(this.swayTimer * this.swaySpeedX) * 10;
-    const desiredY = target.position.y + playerForward.y * 15 + Math.sin(this.swayTimer * this.swaySpeedY) * 5;
-    const desiredZ = target.position.z + playerForward.z * 15 + Math.cos(this.swayTimer * this.swaySpeedX) * 10;
+    const desiredX = target.position.x + playerForward.x * 35 + Math.sin(this.swayTimer * this.swaySpeedX) * 10;
+    const desiredY = target.position.y + playerForward.y * 35 + Math.sin(this.swayTimer * this.swaySpeedY) * 5;
+    const desiredZ = target.position.z + playerForward.z * 35 + Math.cos(this.swayTimer * this.swaySpeedX) * 10;
 
     // Snap to position
     const lerpRate = Math.min(1, dt * 4);

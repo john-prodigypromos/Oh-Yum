@@ -172,7 +172,7 @@ export function updateArena(
         state.sound.enemyShoot();
       }
     }
-    applyShipPhysics(enemy, aiInput, dt, now);
+    // AI directly controls enemy position — skip physics
   }
 
   // ── Player physics ──
