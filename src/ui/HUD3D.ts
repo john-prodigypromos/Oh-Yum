@@ -128,12 +128,12 @@ export class HUD3D {
     this.updateTargetIndicators(enemies, camera);
   }
 
-  private targetMarkers: HTMLDivElement[] = [];
+  private enemyHUDs: HTMLDivElement[] = [];
 
   private updateTargetIndicators(enemies: Ship3D[], camera?: THREE.PerspectiveCamera): void {
-    // Remove old markers
-    for (const m of this.targetMarkers) m.remove();
-    this.targetMarkers = [];
+    // Remove old HUDs
+    for (const m of this.enemyHUDs) m.remove();
+    this.enemyHUDs = [];
 
     if (!camera) return;
 
@@ -143,65 +143,60 @@ export class HUD3D {
     for (const enemy of enemies) {
       if (!enemy.alive) continue;
 
-      // Project enemy position to screen
-      const pos = enemy.position.clone().project(camera);
+      // Project enemy position to screen (offset upward for label above ship)
+      const labelPos = enemy.position.clone();
+      labelPos.y += 8; // above the ship
+      const pos = labelPos.project(camera);
 
-      // pos.x/y are in NDC (-1 to 1), convert to pixels
       const sx = (pos.x * 0.5 + 0.5) * w;
       const sy = (-pos.y * 0.5 + 0.5) * h;
-      const behind = pos.z > 1; // behind camera
+      const behind = pos.z > 1;
 
-      const marker = document.createElement('div');
-      marker.style.cssText = 'position:fixed;pointer-events:none;z-index:22;text-align:center;';
+      if (behind || sx < -50 || sx > w + 50 || sy < -50 || sy > h + 50) continue;
 
-      const dist = enemy.position.distanceTo(camera.position);
-      const distText = Math.round(dist) + 'm';
+      const hud = document.createElement('div');
+      hud.style.cssText = `
+        position:fixed;pointer-events:none;z-index:22;text-align:center;
+        left:${sx}px;top:${sy}px;transform:translate(-50%,-50%);
+      `;
 
-      if (!behind && sx > 20 && sx < w - 20 && sy > 20 && sy < h - 20) {
-        // On screen — show bracket around enemy
-        marker.style.left = sx - 30 + 'px';
-        marker.style.top = sy - 30 + 'px';
-        marker.style.width = '60px';
-        marker.style.height = '60px';
-        marker.style.border = '2px solid #ff4444';
-        marker.style.borderRadius = '4px';
+      // "BAD GUY" label
+      const label = document.createElement('div');
+      label.textContent = 'BAD GUY';
+      label.style.cssText = `
+        font-size:13px;font-weight:bold;color:#ff4444;font-family:Arial,sans-serif;
+        letter-spacing:2px;margin-bottom:4px;
+        text-shadow:0 0 6px rgba(255,0,0,0.5);
+      `;
+      hud.appendChild(label);
 
-        const label = document.createElement('div');
-        label.textContent = distText;
-        label.style.cssText = 'position:absolute;bottom:-18px;left:50%;transform:translateX(-50%);font-size:11px;color:#ff4444;font-family:Arial;white-space:nowrap;';
-        marker.appendChild(label);
-      } else {
-        // Off screen or behind — show arrow at edge pointing toward enemy
-        let edgeX = Math.max(40, Math.min(w - 40, sx));
-        let edgeY = Math.max(40, Math.min(h - 40, sy));
-        if (behind) {
-          edgeX = w - edgeX; // flip if behind
-          edgeY = h - edgeY;
-        }
-        edgeX = Math.max(40, Math.min(w - 40, edgeX));
-        edgeY = Math.max(40, Math.min(h - 40, edgeY));
+      // Health bar background
+      const barBg = document.createElement('div');
+      barBg.style.cssText = `
+        width:100px;height:8px;background:rgba(0,0,0,0.7);
+        border:1px solid #ff4444;border-radius:2px;overflow:hidden;
+        margin:0 auto;
+      `;
 
-        marker.style.left = edgeX - 12 + 'px';
-        marker.style.top = edgeY - 12 + 'px';
-        marker.style.width = '24px';
-        marker.style.height = '24px';
-        marker.style.fontSize = '20px';
-        marker.style.color = '#ff4444';
-        marker.style.lineHeight = '24px';
+      // Health bar fill
+      const barFill = document.createElement('div');
+      const hpPct = Math.max(0, (1 - enemy.damagePct) * 100);
+      barFill.style.cssText = `
+        width:${hpPct}%;height:100%;
+        background:linear-gradient(90deg, #cc0000, #ff4444);
+        transition:width 0.1s ease-out;
+      `;
+      barBg.appendChild(barFill);
+      hud.appendChild(barBg);
 
-        // Arrow pointing toward enemy
-        const angle = Math.atan2(sy - h / 2, sx - w / 2);
-        marker.textContent = '\u25C6'; // diamond
-        marker.style.transform = `rotate(${angle}rad)`;
+      // HP text
+      const hpText = document.createElement('div');
+      hpText.textContent = `${Math.ceil(enemy.hull)}/${enemy.maxHull}`;
+      hpText.style.cssText = 'font-size:10px;color:#ff8888;font-family:Arial;margin-top:2px;';
+      hud.appendChild(hpText);
 
-        const label = document.createElement('div');
-        label.textContent = distText;
-        label.style.cssText = 'position:absolute;top:26px;left:50%;transform:translateX(-50%);font-size:10px;color:#ff4444;font-family:Arial;white-space:nowrap;';
-        marker.appendChild(label);
-      }
-
-      this.container.appendChild(marker);
-      this.targetMarkers.push(marker);
+      this.container.appendChild(hud);
+      this.enemyHUDs.push(hud);
     }
   }
 
