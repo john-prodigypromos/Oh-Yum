@@ -183,84 +183,165 @@ export function createEnvironmentMap(
 export function createPlanet(scene: THREE.Scene): THREE.Group {
   const group = new THREE.Group();
   const rng = seededRng(314);
+  const W = 1024;
+  const H = 512;
 
-  // Planet body
-  const planetGeo = new THREE.SphereGeometry(300, 48, 36);
+  // ── High-res planet surface texture ──
   const planetCanvas = document.createElement('canvas');
-  planetCanvas.width = 512;
-  planetCanvas.height = 256;
+  planetCanvas.width = W;
+  planetCanvas.height = H;
   const ctx = planetCanvas.getContext('2d')!;
 
-  // Base color — gas giant bands
-  const grad = ctx.createLinearGradient(0, 0, 0, 256);
-  grad.addColorStop(0, '#2a4a6a');
-  grad.addColorStop(0.15, '#3a6a5a');
-  grad.addColorStop(0.25, '#2a5a7a');
-  grad.addColorStop(0.35, '#4a6a4a');
-  grad.addColorStop(0.5, '#3a5a6a');
-  grad.addColorStop(0.6, '#2a6a5a');
-  grad.addColorStop(0.7, '#3a4a7a');
-  grad.addColorStop(0.85, '#4a5a5a');
-  grad.addColorStop(1, '#2a4a6a');
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, 512, 256);
+  // Base: warm Jupiter-like bands
+  const base = ctx.createLinearGradient(0, 0, 0, H);
+  base.addColorStop(0.00, '#c4a56a');
+  base.addColorStop(0.08, '#b8956a');
+  base.addColorStop(0.15, '#d4b87a');
+  base.addColorStop(0.22, '#a0784a');
+  base.addColorStop(0.30, '#c8a870');
+  base.addColorStop(0.38, '#8a6840');
+  base.addColorStop(0.45, '#c0a068');
+  base.addColorStop(0.52, '#b09058');
+  base.addColorStop(0.60, '#d0b478');
+  base.addColorStop(0.68, '#907050');
+  base.addColorStop(0.75, '#c4a468');
+  base.addColorStop(0.82, '#a88a5a');
+  base.addColorStop(0.90, '#b89860');
+  base.addColorStop(1.00, '#c4a56a');
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, W, H);
 
-  // Storm swirls and cloud bands
-  for (let i = 0; i < 40; i++) {
-    const x = rng() * 512;
-    const y = rng() * 256;
-    const w = 30 + rng() * 80;
-    const h = 3 + rng() * 8;
-    ctx.fillStyle = `rgba(${150 + rng() * 100}, ${150 + rng() * 100}, ${150 + rng() * 100}, ${0.05 + rng() * 0.1})`;
-    ctx.fillRect(x, y, w, h);
+  // Turbulent cloud bands — streaky horizontal noise
+  for (let pass = 0; pass < 3; pass++) {
+    for (let i = 0; i < 200; i++) {
+      const y = rng() * H;
+      const x = rng() * W;
+      const w = 40 + rng() * 200;
+      const h = 1 + rng() * 4;
+      const bright = rng() > 0.5;
+      const alpha = 0.02 + rng() * 0.06;
+      ctx.fillStyle = bright
+        ? `rgba(255, 240, 200, ${alpha})`
+        : `rgba(80, 50, 30, ${alpha})`;
+      ctx.fillRect(x, y, w, h);
+    }
   }
 
-  // Storm spot
-  const spotX = 300;
-  const spotY = 120;
-  const spotGrad = ctx.createRadialGradient(spotX, spotY, 0, spotX, spotY, 25);
-  spotGrad.addColorStop(0, 'rgba(180, 100, 80, 0.3)');
-  spotGrad.addColorStop(1, 'rgba(180, 100, 80, 0)');
+  // Wavy distortion bands
+  for (let y = 0; y < H; y += 3) {
+    if (rng() < 0.3) {
+      const shift = Math.sin(y * 0.05 + rng() * 10) * (2 + rng() * 4);
+      const strip = ctx.getImageData(0, y, W, 2);
+      ctx.putImageData(strip, Math.round(shift), y);
+    }
+  }
+
+  // Great Red Spot
+  ctx.save();
+  ctx.translate(W * 0.6, H * 0.42);
+  ctx.rotate(0.15);
+  const spotGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, 50);
+  spotGrad.addColorStop(0, 'rgba(180, 80, 50, 0.5)');
+  spotGrad.addColorStop(0.4, 'rgba(200, 100, 60, 0.35)');
+  spotGrad.addColorStop(0.7, 'rgba(160, 90, 50, 0.15)');
+  spotGrad.addColorStop(1, 'rgba(160, 90, 50, 0)');
   ctx.fillStyle = spotGrad;
   ctx.beginPath();
-  ctx.ellipse(spotX, spotY, 30, 15, 0.2, 0, Math.PI * 2);
+  ctx.ellipse(0, 0, 55, 28, 0, 0, Math.PI * 2);
   ctx.fill();
+  // Inner swirl
+  const innerGrad = ctx.createRadialGradient(5, -3, 0, 0, 0, 25);
+  innerGrad.addColorStop(0, 'rgba(220, 120, 70, 0.4)');
+  innerGrad.addColorStop(1, 'rgba(220, 120, 70, 0)');
+  ctx.fillStyle = innerGrad;
+  ctx.beginPath();
+  ctx.ellipse(5, -3, 25, 12, 0.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+
+  // Smaller storm spots
+  for (let i = 0; i < 5; i++) {
+    const sx = rng() * W;
+    const sy = rng() * H;
+    const sr = 8 + rng() * 15;
+    const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+    sg.addColorStop(0, `rgba(${160 + rng() * 60}, ${80 + rng() * 40}, ${40 + rng() * 30}, 0.2)`);
+    sg.addColorStop(1, 'rgba(150, 80, 40, 0)');
+    ctx.fillStyle = sg;
+    ctx.beginPath();
+    ctx.ellipse(sx, sy, sr * 1.5, sr * 0.6, rng() * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   const planetTex = new THREE.CanvasTexture(planetCanvas);
   planetTex.wrapS = THREE.RepeatWrapping;
+  planetTex.anisotropy = 4;
 
+  const planetGeo = new THREE.SphereGeometry(300, 64, 48);
   const planetMat = new THREE.MeshStandardMaterial({
     map: planetTex,
     metalness: 0.0,
-    roughness: 0.8,
+    roughness: 0.9,
   });
-
   const planet = new THREE.Mesh(planetGeo, planetMat);
   group.add(planet);
 
-  // Atmosphere rim glow
-  const atmosGeo = new THREE.SphereGeometry(310, 32, 24);
-  const atmosMat = new THREE.MeshBasicMaterial({
-    color: 0x4488cc,
+  // ── Atmosphere layers ──
+  // Inner glow
+  const atmos1Geo = new THREE.SphereGeometry(306, 48, 36);
+  const atmos1Mat = new THREE.MeshBasicMaterial({
+    color: 0xddaa66,
     transparent: true,
-    opacity: 0.08,
+    opacity: 0.04,
     side: THREE.BackSide,
   });
-  const atmosphere = new THREE.Mesh(atmosGeo, atmosMat);
-  group.add(atmosphere);
+  group.add(new THREE.Mesh(atmos1Geo, atmos1Mat));
 
-  // Ring system
-  const ringGeo = new THREE.RingGeometry(380, 520, 64);
+  // Outer haze
+  const atmos2Geo = new THREE.SphereGeometry(315, 32, 24);
+  const atmos2Mat = new THREE.MeshBasicMaterial({
+    color: 0x8899bb,
+    transparent: true,
+    opacity: 0.03,
+    side: THREE.BackSide,
+  });
+  group.add(new THREE.Mesh(atmos2Geo, atmos2Mat));
+
+  // ── Terminator shadow (dark side) ──
+  const shadowGeo = new THREE.SphereGeometry(302, 48, 36);
+  const shadowMat = new THREE.MeshBasicMaterial({
+    color: 0x000000,
+    transparent: true,
+    opacity: 0.5,
+    side: THREE.FrontSide,
+  });
+  const shadow = new THREE.Mesh(shadowGeo, shadowMat);
+  // Only render the dark half — shift it to cover the unlit side
+  shadow.position.set(-80, 0, 0);
+  group.add(shadow);
+
+  // ── Ring system — multi-band with gaps ──
   const ringCanvas = document.createElement('canvas');
-  ringCanvas.width = 256;
+  ringCanvas.width = 512;
   ringCanvas.height = 1;
   const rctx = ringCanvas.getContext('2d')!;
-  for (let x = 0; x < 256; x++) {
-    const a = (Math.sin(x * 0.1) * 0.5 + 0.5) * 0.3;
-    rctx.fillStyle = `rgba(200, 190, 170, ${a})`;
+  for (let x = 0; x < 512; x++) {
+    const t = x / 512;
+    // Multiple bands with gaps (Cassini-like divisions)
+    let alpha = 0;
+    if (t > 0.05 && t < 0.35) alpha = (Math.sin(t * 80) * 0.5 + 0.5) * 0.35;
+    if (t > 0.38 && t < 0.42) alpha = 0; // Cassini division
+    if (t > 0.42 && t < 0.75) alpha = (Math.sin(t * 60) * 0.5 + 0.5) * 0.25;
+    if (t > 0.80 && t < 0.95) alpha = (Math.sin(t * 100) * 0.5 + 0.5) * 0.15;
+
+    const r = 200 + Math.sin(t * 30) * 30;
+    const g = 185 + Math.sin(t * 20) * 25;
+    const b = 160 + Math.sin(t * 40) * 20;
+    rctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
     rctx.fillRect(x, 0, 1, 1);
   }
   const ringTex = new THREE.CanvasTexture(ringCanvas);
+  const ringGeo = new THREE.RingGeometry(360, 550, 128);
   const ringMat = new THREE.MeshBasicMaterial({
     map: ringTex,
     transparent: true,
@@ -268,11 +349,13 @@ export function createPlanet(scene: THREE.Scene): THREE.Group {
     depthWrite: false,
   });
   const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.rotation.x = Math.PI * 0.45;
+  ring.rotation.x = Math.PI * 0.42;
+  ring.rotation.z = 0.05;
   group.add(ring);
 
-  // Position planet far away to the lower-right
-  group.position.set(800, -400, -1500);
+  // Position planet
+  group.position.set(800, -300, -1200);
+  group.rotation.y = 0.3;
 
   scene.add(group);
   return group;

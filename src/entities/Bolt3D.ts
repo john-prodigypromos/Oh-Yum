@@ -16,8 +16,8 @@ export interface BoltData {
 }
 
 const POOL_SIZE = 100;
-const BOLT_LENGTH = 10;
-const BOLT_RADIUS = 0.25;
+const BOLT_LENGTH = 16;
+const BOLT_RADIUS = 0.3;
 
 // Shared geometries (created once)
 let boltGeo: THREE.CylinderGeometry | null = null;

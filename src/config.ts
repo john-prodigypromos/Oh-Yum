@@ -23,7 +23,7 @@ export const PHYSICS = {
 } as const;
 
 export const WEAPONS = {
-  BLASTER_FIRE_RATE: 150,
+  BLASTER_FIRE_RATE: 60,  // rapid fire — near-continuous stream
   BLASTER_BOLT_SPEED: 500,  // fast enough to hit moving enemies
   BLASTER_DAMAGE: 10,  // enemies die in ~5-8 hits depending on difficulty
   BLASTER_BOLT_LIFETIME: 2000,
