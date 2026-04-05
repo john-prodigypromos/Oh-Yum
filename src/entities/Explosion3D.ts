@@ -93,23 +93,30 @@ export class ExplosionPool {
     this.spawnAt(screenX, screenY, 50, 'hit-flash', 0.4);
   }
 
-  /** Spectacular multi-stage death explosion */
+  /** Chaotic multi-stage death explosion — lots of random variation */
   spawnDeath(screenX: number, screenY: number): void {
-    // Jitter helper
-    const jit = () => (Math.random() - 0.5) * 60;
+    const jit = () => (Math.random() - 0.5) * 150; // wide scatter
+    const rSize = () => 100 + Math.random() * 200;  // random sizes
+    const rDur = () => 1.5 + Math.random() * 2.0;   // random durations
+    const anims = ['boom1', 'boom2', 'boom3'];
+    const rAnim = () => anims[Math.floor(Math.random() * anims.length)];
 
-    // Stage 1: massive initial flash
-    this.spawnAt(screenX, screenY, 250, 'boom1', 3.0);
+    // Immediate blast
+    this.spawnAt(screenX, screenY, 300, 'boom1', 2.5);
 
-    // Stage 2: secondary bursts with offsets
-    setTimeout(() => this.spawnAt(screenX + jit(), screenY + jit(), 180, 'boom2', 2.5), 150);
-    setTimeout(() => this.spawnAt(screenX + jit(), screenY + jit(), 200, 'boom1', 2.8), 300);
-    setTimeout(() => this.spawnAt(screenX + jit(), screenY + jit(), 160, 'boom3', 2.2), 500);
-
-    // Stage 3: final blooms
-    setTimeout(() => this.spawnAt(screenX + jit(), screenY + jit(), 280, 'boom2', 2.0), 800);
-    setTimeout(() => this.spawnAt(screenX + jit(), screenY + jit(), 140, 'boom3', 1.8), 1100);
-    setTimeout(() => this.spawnAt(screenX + jit(), screenY + jit(), 120, 'boom3', 1.5), 1400);
+    // 10 chaotic fireballs at random times, positions, sizes
+    for (let i = 0; i < 10; i++) {
+      const delay = 50 + Math.random() * 1500;
+      setTimeout(() => {
+        this.spawnAt(
+          screenX + jit(),
+          screenY + jit(),
+          rSize(),
+          rAnim(),
+          rDur(),
+        );
+      }, delay);
+    }
   }
 
   // No-op update — explosions are self-managing via CSS animation + setTimeout cleanup

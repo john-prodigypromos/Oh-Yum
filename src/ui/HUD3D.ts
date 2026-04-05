@@ -153,7 +153,51 @@ export class HUD3D {
       const sy = (-pos.y * 0.5 + 0.5) * h;
       const behind = pos.z > 1;
 
-      if (behind || sx < -50 || sx > w + 50 || sy < -50 || sy > h + 50) continue;
+      const onScreen = !behind && sx > 30 && sx < w - 30 && sy > 30 && sy < h - 30;
+
+      if (!onScreen) {
+        // ── Off-screen tracker arrow at screen edge ──
+        const tracker = document.createElement('div');
+        tracker.style.cssText = 'position:fixed;pointer-events:none;z-index:22;text-align:center;';
+
+        // Calculate edge position — clamp to screen border with margin
+        let edgeX = sx;
+        let edgeY = sy;
+        if (behind) { edgeX = w - edgeX; edgeY = h - edgeY; }
+        const margin = 40;
+        edgeX = Math.max(margin, Math.min(w - margin, edgeX));
+        edgeY = Math.max(margin, Math.min(h - margin, edgeY));
+
+        // Arrow pointing toward enemy
+        const angle = Math.atan2(sy - h / 2, sx - w / 2) + (behind ? Math.PI : 0);
+
+        tracker.style.left = edgeX + 'px';
+        tracker.style.top = edgeY + 'px';
+        tracker.style.transform = 'translate(-50%,-50%)';
+
+        // Arrow triangle
+        const arrow = document.createElement('div');
+        arrow.style.cssText = `
+          width:0;height:0;
+          border-left:10px solid transparent;border-right:10px solid transparent;
+          border-bottom:18px solid #ff4444;
+          transform:rotate(${angle - Math.PI / 2}rad);
+          filter:drop-shadow(0 0 4px rgba(255,0,0,0.6));
+          margin:0 auto;
+        `;
+        tracker.appendChild(arrow);
+
+        // Label
+        const dist = Math.round(enemy.position.distanceTo(camera.position));
+        const label = document.createElement('div');
+        label.textContent = `VOX ${i + 1} [${dist}m]`;
+        label.style.cssText = 'font-size:10px;color:#ff4444;font-family:Arial;white-space:nowrap;margin-top:2px;';
+        tracker.appendChild(label);
+
+        this.container.appendChild(tracker);
+        this.enemyHUDs.push(tracker);
+        continue;
+      }
 
       const hud = document.createElement('div');
       hud.style.cssText = `
