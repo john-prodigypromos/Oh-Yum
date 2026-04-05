@@ -140,7 +140,8 @@ export class HUD3D {
     const w = window.innerWidth;
     const h = window.innerHeight;
 
-    for (const enemy of enemies) {
+    for (let i = 0; i < enemies.length; i++) {
+      const enemy = enemies[i];
       if (!enemy.alive) continue;
 
       // Project enemy position to screen (offset upward for label above ship)
@@ -160,9 +161,8 @@ export class HUD3D {
         left:${sx}px;top:${sy}px;transform:translate(-50%,-50%);
       `;
 
-      // "BAD GUY" label
       const label = document.createElement('div');
-      label.textContent = 'BAD GUY';
+      label.textContent = `VOX ${i + 1}`;
       label.style.cssText = `
         font-size:13px;font-weight:bold;color:#ff4444;font-family:Arial,sans-serif;
         letter-spacing:2px;margin-bottom:4px;
