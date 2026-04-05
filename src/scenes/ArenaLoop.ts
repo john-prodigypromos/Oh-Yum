@@ -79,12 +79,14 @@ export function createArenaState(
     enemyGeo.scale.set(3, 3, 3); // triple size for maximum visibility
     applyMaterials(enemyGeo, createEnemyMaterials());
 
-    // Spawn directly ahead of player — impossible to miss
-    const spread = (i - (levelConfig.enemyCount - 1) / 2) * 10;
+    // Spawn at random positions around the player — must hunt for them
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 40 + Math.random() * 30;
+    const elevation = (Math.random() - 0.5) * 20;
     enemyGeo.position.set(
-      spread,                        // spread sideways
-      (Math.random() - 0.5) * 3,    // slight vertical offset
-      20 + i * 5,                    // 20-30 units ahead (+Z = forward)
+      Math.cos(angle) * dist,
+      elevation,
+      Math.sin(angle) * dist,
     );
     scene.add(enemyGeo);
 
