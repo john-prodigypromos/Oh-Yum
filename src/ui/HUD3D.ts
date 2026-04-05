@@ -125,7 +125,10 @@ export class HUD3D {
     overlay.appendChild(this.container);
   }
 
+  private updateCounter = 0;
+
   update(player: Ship3D, enemies: Ship3D[], score: number, level: number, camera?: THREE.PerspectiveCamera): void {
+    this.updateCounter++;
     this.shieldBar.style.width = `${player.shieldPct * 100}%`;
     this.hullBar.style.width = `${(1 - player.damagePct) * 100}%`;
 
@@ -144,8 +147,10 @@ export class HUD3D {
     this.targetsEl.textContent = `${total - alive}/${total}`;
     this.levelEl.textContent = String(level);
 
-    // ── Target indicators — show arrow + distance for each enemy ──
-    this.updateTargetIndicators(enemies, camera);
+    // ── Target indicators — throttle to every 3rd frame for performance ──
+    if (this.updateCounter % 3 === 0) {
+      this.updateTargetIndicators(enemies, camera);
+    }
   }
 
   private enemyHUDs: HTMLDivElement[] = [];

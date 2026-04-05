@@ -29,7 +29,7 @@ export function createRenderer(canvas: HTMLCanvasElement): RendererBundle {
     antialias: false, // SMAA handles AA via post-processing
     powerPreference: 'high-performance',
   });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 2));
   renderer.setSize(w, h);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 0.8;
@@ -47,20 +47,19 @@ export function createRenderer(canvas: HTMLCanvasElement): RendererBundle {
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
-  // Bloom — reduced resolution on mobile for performance
-  const bloomRes = isMobile
-    ? new THREE.Vector2(Math.floor(w / 2), Math.floor(h / 2))
-    : new THREE.Vector2(w, h);
+  // Bloom — always half-res for performance
   const bloomPass = new UnrealBloomPass(
-    bloomRes,
-    0.6,  // strength — subtle glow, no blowout
+    new THREE.Vector2(Math.floor(w / 2), Math.floor(h / 2)),
+    0.5,  // strength
     0.4,  // radius
-    0.95, // threshold — only very bright emissives bloom
+    0.95, // threshold
   );
   composer.addPass(bloomPass);
 
-  // Anti-aliasing
-  composer.addPass(new SMAAPass());
+  // Anti-aliasing — skip on mobile
+  if (!isMobile) {
+    composer.addPass(new SMAAPass());
+  }
 
   // Final output (applies tonemapping + color space)
   composer.addPass(new OutputPass());

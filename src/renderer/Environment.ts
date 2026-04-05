@@ -166,7 +166,7 @@ export function createEnvironmentMap(
   camera: THREE.PerspectiveCamera,
 ): THREE.CubeTexture {
   // Render the starfield + nebulae to a cube render target for PBR reflections
-  const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(256, {
+  const cubeRenderTarget = new THREE.WebGLCubeRenderTarget(128, {
     format: THREE.RGBAFormat,
     generateMipmaps: true,
     minFilter: THREE.LinearMipmapLinearFilter,
