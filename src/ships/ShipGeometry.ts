@@ -19,12 +19,12 @@ export function createPlayerShipGeometry(): THREE.Group {
   fuselage.position.z = 0;
   group.add(fuselage);
 
-  // ── Nose cone ──
-  const noseGeo = new THREE.ConeGeometry(0.5, 3, 8);
+  // ── Nose cone (short) ──
+  const noseGeo = new THREE.ConeGeometry(0.5, 1.5, 8);
   noseGeo.rotateX(-Math.PI / 2);
   const nose = new THREE.Mesh(noseGeo);
   nose.name = 'nose';
-  nose.position.z = 5.5;
+  nose.position.z = 4.5;
   group.add(nose);
 
   // ── Cockpit dome ──
