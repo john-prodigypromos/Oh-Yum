@@ -320,39 +320,6 @@ export function createPlanet(scene: THREE.Scene): THREE.Group {
   shadow.position.set(-80, 0, 0);
   group.add(shadow);
 
-  // ── Ring system — multi-band with gaps ──
-  const ringCanvas = document.createElement('canvas');
-  ringCanvas.width = 512;
-  ringCanvas.height = 1;
-  const rctx = ringCanvas.getContext('2d')!;
-  for (let x = 0; x < 512; x++) {
-    const t = x / 512;
-    // Multiple bands with gaps (Cassini-like divisions)
-    let alpha = 0;
-    if (t > 0.05 && t < 0.35) alpha = (Math.sin(t * 80) * 0.5 + 0.5) * 0.35;
-    if (t > 0.38 && t < 0.42) alpha = 0; // Cassini division
-    if (t > 0.42 && t < 0.75) alpha = (Math.sin(t * 60) * 0.5 + 0.5) * 0.25;
-    if (t > 0.80 && t < 0.95) alpha = (Math.sin(t * 100) * 0.5 + 0.5) * 0.15;
-
-    const r = 200 + Math.sin(t * 30) * 30;
-    const g = 185 + Math.sin(t * 20) * 25;
-    const b = 160 + Math.sin(t * 40) * 20;
-    rctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    rctx.fillRect(x, 0, 1, 1);
-  }
-  const ringTex = new THREE.CanvasTexture(ringCanvas);
-  const ringGeo = new THREE.RingGeometry(360, 550, 128);
-  const ringMat = new THREE.MeshBasicMaterial({
-    map: ringTex,
-    transparent: true,
-    side: THREE.DoubleSide,
-    depthWrite: false,
-  });
-  const ring = new THREE.Mesh(ringGeo, ringMat);
-  ring.rotation.x = Math.PI * 0.42;
-  ring.rotation.z = 0.05;
-  group.add(ring);
-
   // Position planet
   group.position.set(800, -300, -1200);
   group.rotation.y = 0.3;
