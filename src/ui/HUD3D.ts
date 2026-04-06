@@ -296,7 +296,7 @@ export class HUD3D {
         if (portraitFile) {
           const img = document.createElement('img');
           img.src = `/portraits/${portraitFile}`;
-          img.style.cssText = 'width:75px;height:75px;border-radius:50%;object-fit:cover;border:2px solid #ff4444;filter:drop-shadow(0 0 3px rgba(255,0,0,0.4));';
+          img.style.cssText = 'width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid #ff4444;filter:drop-shadow(0 0 3px rgba(255,0,0,0.4));';
           labelRow.appendChild(img);
         }
 
@@ -317,38 +317,22 @@ export class HUD3D {
         left:${sx}px;top:${sy}px;transform:translate(-50%,-50%);
       `;
 
-      // Portrait + name row
-      const nameRow = document.createElement('div');
-      nameRow.style.cssText = 'display:flex;align-items:center;gap:6px;justify-content:center;margin-bottom:4px;';
-
+      // Portrait (centered, stacked vertically)
       const portraitFile = ENEMY_PORTRAITS[i];
       if (portraitFile) {
         const img = document.createElement('img');
         img.src = `/portraits/${portraitFile}`;
-        img.style.cssText = 'width:96px;height:96px;border-radius:50%;object-fit:cover;border:2px solid #ff4444;filter:drop-shadow(0 0 6px rgba(255,0,0,0.5));';
-        nameRow.appendChild(img);
+        img.style.cssText = 'width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid #ff4444;filter:drop-shadow(0 0 6px rgba(255,0,0,0.5));display:block;margin:0 auto;';
+        hud.appendChild(img);
       }
 
-      const onScreenDist = Math.round(enemy.position.distanceTo(player.position));
-      const label = document.createElement('div');
-      label.textContent = `${ENEMY_NAMES[i] ?? `ENEMY ${i + 1}`} [${onScreenDist}m]`;
-      label.style.cssText = `
-        font-size:13px;font-weight:bold;color:#ff4444;font-family:Rajdhani,sans-serif;
-        letter-spacing:2px;
-        text-shadow:0 0 6px rgba(255,0,0,0.5);
-      `;
-      nameRow.appendChild(label);
-      hud.appendChild(nameRow);
-
-      // Health bar background
+      // Health bar directly under portrait
       const barBg = document.createElement('div');
       barBg.style.cssText = `
-        width:130px;height:10px;background:rgba(0,0,0,0.7);
+        width:72px;height:8px;background:rgba(0,0,0,0.7);
         border:1px solid #ff4444;border-radius:2px;overflow:hidden;
-        margin:0 auto;
+        margin:4px auto 0;
       `;
-
-      // Health bar fill
       const barFill = document.createElement('div');
       const hpPct = Math.max(0, (1 - enemy.damagePct) * 100);
       barFill.style.cssText = `
@@ -359,11 +343,16 @@ export class HUD3D {
       barBg.appendChild(barFill);
       hud.appendChild(barBg);
 
-      // HP text
-      const hpText = document.createElement('div');
-      hpText.textContent = `${Math.ceil(enemy.hull)}/${enemy.maxHull}`;
-      hpText.style.cssText = 'font-size:10px;color:#ff8888;font-family:Rajdhani,sans-serif;margin-top:2px;';
-      hud.appendChild(hpText);
+      // Name + distance label
+      const onScreenDist = Math.round(enemy.position.distanceTo(player.position));
+      const label = document.createElement('div');
+      label.textContent = `${ENEMY_NAMES[i] ?? `ENEMY ${i + 1}`} [${onScreenDist}m]`;
+      label.style.cssText = `
+        font-size:10px;font-weight:bold;color:#ff4444;font-family:Rajdhani,sans-serif;
+        letter-spacing:1px;margin-top:2px;
+        text-shadow:0 0 4px rgba(255,0,0,0.5);
+      `;
+      hud.appendChild(label);
 
       this.container.appendChild(hud);
       this.enemyHUDs.push(hud);

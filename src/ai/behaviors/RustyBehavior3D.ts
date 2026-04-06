@@ -66,37 +66,37 @@ export class RustyBehavior3D implements AIBehavior3D {
 
     switch (this.phase) {
       case 'cruise': {
-        // Orbit the player at mid-range — clearly visible, building tension
-        // Enemy flies in wide arcs around the player like a circling predator
-        const orbitRadius = 250 + this.idx * 60;
-        const verticalWave = Math.sin(this.timer * 0.4 + this.idx) * 40;
+        // Fly ahead of the player — clearly visible in their forward view
+        // Orbits in the player's forward hemisphere so they can always see the enemy
+        const playerFwd = target.getForward();
+        const playerRight = new THREE.Vector3(-playerFwd.z, 0, playerFwd.x);
+        const orbitRadius = 200 + this.idx * 40;
+        const lateralSwing = Math.sin(this.orbitAngle) * orbitRadius * 0.6;
+        const verticalWave = Math.sin(this.timer * 0.4 + this.idx) * 30;
 
-        desiredPos.set(
-          target.position.x + Math.cos(this.orbitAngle) * orbitRadius,
-          target.position.y + verticalWave,
-          target.position.z + Math.sin(this.orbitAngle) * orbitRadius,
-        );
+        // Position ahead of player + lateral swing
+        desiredPos.copy(target.position);
+        desiredPos.addScaledVector(playerFwd, orbitRadius); // always in front
+        desiredPos.addScaledVector(playerRight, lateralSwing);
+        desiredPos.y += verticalWave;
         break;
       }
 
       case 'closing': {
-        // Gradually spiral inward toward the player — the chase
-        // Shrinks orbit radius over time while weaving
+        // Gradually close distance while staying in the player's forward view
+        const playerFwd = target.getForward();
+        const playerRight = new THREE.Vector3(-playerFwd.z, 0, playerFwd.x);
         const closingProgress = Math.min(1, this.phaseTimer / 8);
-        const radius = 250 * (1 - closingProgress * 0.7); // 250 → 75
+        const forwardDist = 200 * (1 - closingProgress * 0.7); // 200 → 60
         const weaveSpeed = 1.5 + this.idx * 0.3;
-        const lateralWeave = Math.sin(this.timer * weaveSpeed) * 20;
-        const verticalWeave = Math.cos(this.timer * weaveSpeed * 0.6) * 15;
+        const lateralWeave = Math.sin(this.timer * weaveSpeed) * 40;
+        const verticalWeave = Math.cos(this.timer * weaveSpeed * 0.6) * 20;
 
-        const toPlayer = target.position.clone().sub(self.position);
-        if (toPlayer.length() > 0.1) toPlayer.normalize();
-        const right = new THREE.Vector3(-toPlayer.z, 0, toPlayer.x);
-
-        // Aim ahead of the player but offset to the side
+        // Stay ahead but get closer
         desiredPos.copy(target.position);
-        desiredPos.addScaledVector(right, Math.cos(this.orbitAngle) * radius);
-        desiredPos.y += Math.sin(this.orbitAngle) * radius * 0.4 + verticalWeave;
-        desiredPos.addScaledVector(right, lateralWeave);
+        desiredPos.addScaledVector(playerFwd, forwardDist);
+        desiredPos.addScaledVector(playerRight, lateralWeave);
+        desiredPos.y += verticalWeave;
         break;
       }
 
