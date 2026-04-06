@@ -14,8 +14,13 @@ function seededRng(seed: number) {
   };
 }
 
-/** Load the NASA 4K star map as a photorealistic skybox sphere */
-function createPhotoSkybox(scene: THREE.Scene): void {
+/** Load the NASA 4K star map as a photorealistic skybox sphere.
+ *  Returns a group that should be locked to the camera position each frame. */
+function createPhotoSkybox(scene: THREE.Scene): THREE.Group {
+  const skyGroup = new THREE.Group();
+  skyGroup.renderOrder = -2;
+  scene.add(skyGroup);
+
   const loader = new THREE.TextureLoader();
   loader.load('/textures/starmap_4k.jpg', (tex) => {
     tex.mapping = THREE.EquirectangularReflectionMapping;
@@ -28,8 +33,10 @@ function createPhotoSkybox(scene: THREE.Scene): void {
     });
     const sky = new THREE.Mesh(skyGeo, skyMat);
     sky.renderOrder = -2;
-    scene.add(sky);
+    skyGroup.add(sky);
   });
+
+  return skyGroup;
 }
 
 export function createStarfield(scene: THREE.Scene): THREE.Points {
@@ -398,6 +405,7 @@ export function createMoon(scene: THREE.Scene): THREE.Group {
 }
 
 export interface SpaceEnvironment {
+  skybox: THREE.Group;
   stars: THREE.Points;
   nebulae: THREE.Group;
   sun: THREE.DirectionalLight;
@@ -412,7 +420,7 @@ export function createSpaceEnvironment(
   camera: THREE.PerspectiveCamera,
 ): SpaceEnvironment {
   // Load NASA photo-realistic skybox (replaces procedural background)
-  createPhotoSkybox(scene);
+  const skybox = createPhotoSkybox(scene);
 
   const stars = createStarfield(scene);
   const nebulae = createNebulae(scene);
@@ -423,5 +431,5 @@ export function createSpaceEnvironment(
   // Generate environment map for PBR reflections
   createEnvironmentMap(renderer, scene, camera);
 
-  return { stars, nebulae, sun, hemisphere, planet, moon };
+  return { skybox, stars, nebulae, sun, hemisphere, planet, moon };
 }

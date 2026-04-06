@@ -586,10 +586,16 @@ function animate() {
     bundle.camera.lookAt(0, 0, 0);
   }
 
-  // Slow planet/moon rotation for realism
+  // Slow planet/moon rotation for realism + keep skybox centered on camera
   if (spaceEnv) {
     spaceEnv.planet.rotation.y += dt * 0.02;
     spaceEnv.moon.rotation.y += dt * 0.05;
+
+    // Lock skybox + starfield + nebulae to camera so you never fly past the sky
+    const camPos = bundle.camera.position;
+    spaceEnv.skybox.position.copy(camPos);
+    spaceEnv.stars.position.copy(camPos);
+    spaceEnv.nebulae.position.copy(camPos);
   }
 
   bundle.composer.render();
