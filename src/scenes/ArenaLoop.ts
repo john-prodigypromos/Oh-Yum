@@ -162,13 +162,14 @@ export function updateArena(
     thrust: combinedThrust,
   };
 
-  // Vertical movement: mouse (desktop) + joystick Y (mobile)
+  // Vertical movement: mouse Y (desktop) + W/S keys + joystick Y (mobile)
   // Push up = ship goes up, push down = ship goes down
-  // Uses same thrust force as forward movement so it feels proportional
-  const touchVertical = Math.abs(touch.pitch) > 0 ? touch.pitch : 0; // joystick up = positive pitch = ship goes up
-  const verticalInput = mouse.verticalMove + touchVertical;
+  // 3x thrust multiplier so vertical movement overcomes drag and feels responsive
+  const keyVertical = (keys['KeyW'] ? 1 : 0) + (keys['KeyS'] ? -1 : 0);
+  const touchVertical = Math.abs(touch.pitch) > 0 ? touch.pitch : 0;
+  const verticalInput = mouse.verticalMove + touchVertical + keyVertical;
   if (verticalInput !== 0) {
-    const vertForce = PHYSICS.THRUST * player.speedMult * verticalInput;
+    const vertForce = PHYSICS.THRUST * 3 * player.speedMult * verticalInput;
     player.velocity.y += vertForce * dt;
   }
 
