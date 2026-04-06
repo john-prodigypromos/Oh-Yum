@@ -66,7 +66,7 @@ export function createArenaState(
 
   // Hide entire player ship — cockpit SVG overlay provides the visual framing
   playerGeo.traverse((child) => {
-    if (child instanceof THREE.Mesh) child.visible = false;
+    if (child instanceof THREE.Mesh || child instanceof THREE.Light) child.visible = false;
   });
 
   // ── Enemies ──
