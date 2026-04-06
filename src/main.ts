@@ -385,6 +385,8 @@ function startArena(): void {
   hud = new HUD3D();
   crosshairEl.style.display = 'block';
 
+  // Level start sound
+  arena.sound.levelStart();
 }
 
 function showHighScoreOverlay(): void {
@@ -429,9 +431,10 @@ function showHighScoreOverlay(): void {
   `;
   document.head.appendChild(style);
 
-  // Play yay sound
+  // Play victory sounds
   if (arena?.sound) {
-    // sound.yay() removed — music carries the emotion
+    arena.sound.victory();
+    setTimeout(() => arena?.sound.yay(), 800);
   }
 
   // Name entry
@@ -500,19 +503,17 @@ function showGameOverOverlay(): void {
   `;
   panel.appendChild(villainImg);
 
-  const taunt = document.createElement('div');
-  taunt.textContent = 'TRY AGAIN LOSER!';
-  taunt.style.cssText = `
-    font-size:clamp(22px,6vw,42px);font-weight:bold;color:#ff4444;letter-spacing:2px;
-    margin-bottom:8px;text-shadow:0 0 20px rgba(255,68,68,0.5);text-align:center;
+  // Villain monologue — unique taunt per enemy
+  const villainLines = ['I am so righteous', "That's what I thought, thug", "Don't mess with my empire"];
+  const monologue = document.createElement('div');
+  monologue.textContent = `"${villainLines[Math.min(currentLevelIndex, villainLines.length - 1)]}"`;
+  monologue.style.cssText = `
+    font-size:clamp(22px,6vw,42px);font-weight:bold;color:#ff4444;font-style:italic;
+    letter-spacing:2px;margin-bottom:16px;text-align:center;
+    text-shadow:0 0 20px rgba(255,68,68,0.5);
     animation: villainBounce 0.5s ease-out;
   `;
-  panel.appendChild(taunt);
-
-  const subtitle = document.createElement('div');
-  subtitle.textContent = 'MWAHAHAHA!';
-  subtitle.style.cssText = 'font-size:20px;color:#ff8844;margin-bottom:8px;font-style:italic;letter-spacing:4px;';
-  panel.appendChild(subtitle);
+  panel.appendChild(monologue);
 
   const scoreText = document.createElement('div');
   scoreText.textContent = `SCORE: ${(arena?.score ?? 0).toLocaleString()}`;
@@ -538,9 +539,10 @@ function showGameOverOverlay(): void {
   `;
   document.head.appendChild(style);
 
-  // Play evil laugh sound
+  // Play defeat + evil laugh sounds
   if (arena?.sound) {
-    // sound.evilLaugh() removed
+    arena.sound.defeat();
+    setTimeout(() => arena?.sound.evilLaugh(), 400);
   }
 }
 

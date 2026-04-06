@@ -17,7 +17,7 @@ import { createPlayerMaterials, createEnemyMaterials, applyMaterials } from '../
 import { TouchControls3D } from '../ui/TouchControls3D';
 import { MouseControls } from '../ui/MouseControls';
 import { SoundSystem } from '../systems/SoundSystem';
-import { SHIP, AI } from '../config';
+import { SHIP, AI, PHYSICS } from '../config';
 import { getCurrentLevel, type LevelConfig } from '../state/LevelState';
 import { DIFFICULTY, currentDifficulty } from '../state/Difficulty';
 
@@ -151,18 +151,26 @@ export function updateArena(
   const mouse = mouseControls.getInput();
   const touch = touchControls.getInput();
 
+  // Thrust: ArrowUp / ArrowDown on desktop, touch buttons on mobile
+  const keyThrust = (keys['ArrowUp'] ? 1 : 0) + (keys['ArrowDown'] ? -1 : 0);
+  const combinedThrust = Math.max(-1, Math.min(1, keyThrust + touch.thrust));
+
   const input: ShipInput = {
     yaw: Math.max(-1, Math.min(1, mouse.yaw + touch.yaw)),
     pitch: 0, // pitch rotation disabled — vertical movement used instead
     roll: 0,
-    thrust: 0,
+    thrust: combinedThrust,
   };
 
   // Vertical movement: mouse (desktop) + joystick Y (mobile)
   // Push up = ship goes up, push down = ship goes down
-  const vertSpeed = 60;
-  const touchVertical = Math.abs(touch.pitch) > 0 ? -touch.pitch : 0; // touch.pitch was inverted, re-invert for direct movement
-  player.position.y += (mouse.verticalMove + touchVertical) * vertSpeed * dt;
+  // Uses same thrust force as forward movement so it feels proportional
+  const touchVertical = Math.abs(touch.pitch) > 0 ? touch.pitch : 0; // joystick up = positive pitch = ship goes up
+  const verticalInput = mouse.verticalMove + touchVertical;
+  if (verticalInput !== 0) {
+    const vertForce = PHYSICS.THRUST * player.speedMult * verticalInput;
+    player.velocity.y += vertForce * dt;
+  }
 
   // ── Player weapons — auto-aim at nearest alive enemy ──
   if (keys['Space'] || touch.fire) {
@@ -418,7 +426,7 @@ export function updateArena(
   if (allEnemiesDead && !state.victory) {
     state.victory = true;
     state.victoryTime = now;
-    // Music keeps playing through victory screen
+    state.sound.levelComplete();
   }
   } catch (e) {
     console.error('Arena update error:', e);

@@ -31,6 +31,11 @@ export class TouchControls3D {
   private thrustRadius: number;
   private thrustPressed = false;
 
+  // Reverse button state
+  private reverseCenter: { x: number; y: number };
+  private reverseRadius: number;
+  private reversePressed = false;
+
   constructor() {
     // Create overlay canvas for touch visualization
     this.canvas = document.createElement('canvas');
@@ -53,12 +58,14 @@ export class TouchControls3D {
     this.joystickRadius = Math.round(ref * 0.12);
     this.fireRadius = Math.round(ref * 0.09);
     this.thrustRadius = Math.round(ref * 0.07);
+    this.reverseRadius = Math.round(ref * 0.07);
 
     const margin = Math.round(ref * 0.22);
     const joystickBottomMargin = Math.round(ref * 0.35); // extra clearance above score HUD
     this.joystickCenter = { x: margin, y: h - joystickBottomMargin };
     this.fireCenter = { x: w - margin, y: h - margin };
     this.thrustCenter = { x: w - margin, y: h - margin - this.fireRadius * 3 };
+    this.reverseCenter = { x: w - margin, y: h - margin - this.fireRadius * 3 - this.thrustRadius * 2.8 };
 
     if (this.enabled) {
       this.setupTouch();
@@ -80,12 +87,14 @@ export class TouchControls3D {
     this.joystickRadius = Math.round(ref * 0.12);
     this.fireRadius = Math.round(ref * 0.09);
     this.thrustRadius = Math.round(ref * 0.07);
+    this.reverseRadius = Math.round(ref * 0.07);
 
     const margin = Math.round(ref * 0.22);
     const joystickBottomMargin = Math.round(ref * 0.35); // extra clearance above score HUD
     this.joystickCenter = { x: margin, y: h - joystickBottomMargin };
     this.fireCenter = { x: w - margin, y: h - margin };
     this.thrustCenter = { x: w - margin, y: h - margin - this.fireRadius * 3 };
+    this.reverseCenter = { x: w - margin, y: h - margin - this.fireRadius * 3 - this.thrustRadius * 2.8 };
   }
 
   private setupTouch(): void {
@@ -104,6 +113,12 @@ export class TouchControls3D {
         // Thrust button?
         if (this.dist(x, y, this.thrustCenter.x, this.thrustCenter.y) < this.thrustRadius * 1.5) {
           this.thrustPressed = true;
+          continue;
+        }
+
+        // Reverse button?
+        if (this.dist(x, y, this.reverseCenter.x, this.reverseCenter.y) < this.reverseRadius * 1.5) {
+          this.reversePressed = true;
           continue;
         }
 
@@ -139,6 +154,9 @@ export class TouchControls3D {
       this.thrustPressed = active.some(t =>
         this.dist(t.clientX, t.clientY, this.thrustCenter.x, this.thrustCenter.y) < this.thrustRadius * 1.5
       );
+      this.reversePressed = active.some(t =>
+        this.dist(t.clientX, t.clientY, this.reverseCenter.x, this.reverseCenter.y) < this.reverseRadius * 1.5
+      );
     });
   }
 
@@ -164,7 +182,7 @@ export class TouchControls3D {
     return {
       yaw: Math.abs(this.joystickDelta.x) > 0.15 ? this.joystickDelta.x : 0,
       pitch: Math.abs(this.joystickDelta.y) > 0.15 ? -this.joystickDelta.y : 0, // inverted: push up = pitch down
-      thrust: this.thrustPressed ? 1 : 0,
+      thrust: (this.thrustPressed ? 1 : 0) + (this.reversePressed ? -1 : 0),
       fire: this.firePressed,
     };
   }
@@ -214,6 +232,18 @@ export class TouchControls3D {
     ctx.fillStyle = 'rgba(0,136,255,0.6)';
     ctx.font = 'bold 10px Rajdhani';
     ctx.fillText('THRUST', this.thrustCenter.x, this.thrustCenter.y + 4);
+
+    // Reverse button
+    ctx.fillStyle = this.reversePressed ? 'rgba(255,170,0,0.5)' : 'rgba(255,170,0,0.25)';
+    ctx.beginPath();
+    ctx.arc(this.reverseCenter.x, this.reverseCenter.y, this.reverseRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,170,0,0.5)';
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(255,170,0,0.6)';
+    ctx.font = 'bold 10px Rajdhani';
+    ctx.fillText('REVERSE', this.reverseCenter.x, this.reverseCenter.y + 4);
   }
 
   isEnabled(): boolean { return this.enabled; }

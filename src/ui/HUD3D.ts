@@ -51,6 +51,17 @@ export class HUD3D {
       .hud-targets { font-size:13px;color:#aaa;margin-top:4px; }
       .hud-level { font-size:12px;color:#88aacc;margin-top:4px; }
       .hud-bottom-right { position:absolute;bottom:12px;right:16px;font-size:14px;font-weight:bold;color:#00ff66;letter-spacing:1px; }
+
+      /* ── Cockpit nose overlay ── */
+      .cockpit-nose {
+        position:fixed;
+        bottom:0;left:50%;
+        transform:translateX(-50%);
+        width:325px;height:170px;
+        pointer-events:none;
+        z-index:19;
+      }
+      .cockpit-nose svg { width:100%;height:100%; }
     `;
     document.head.appendChild(style);
 
@@ -127,6 +138,88 @@ export class HUD3D {
 
     // Bottom-right: branding
     this.container.appendChild(el('div', { class: 'hud-bottom-right' }, 'PRIDAY LABS'));
+
+    // ── Cockpit nose — always visible at bottom-center ──
+    const nose = document.createElement('div');
+    nose.className = 'cockpit-nose';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('viewBox', '0 0 325 170');
+    svg.setAttribute('fill', 'none');
+
+    // Defs
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+
+    // Hull gradient
+    const gHull = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+    gHull.id = 'noseHull'; gHull.setAttribute('x1','162'); gHull.setAttribute('y1','0'); gHull.setAttribute('x2','162'); gHull.setAttribute('y2','170'); gHull.setAttribute('gradientUnits','userSpaceOnUse');
+    for (const [o, c] of [['0','#7a99b8'],['0.3','#5c7a96'],['0.7','#3d5568'],['1','#2a3a48']]) {
+      const s = document.createElementNS('http://www.w3.org/2000/svg','stop'); s.setAttribute('offset',o); s.setAttribute('stop-color',c); gHull.appendChild(s);
+    }
+    defs.appendChild(gHull);
+
+    // Edge gradient
+    const gEdge = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+    gEdge.id = 'noseEdge'; gEdge.setAttribute('x1','162'); gEdge.setAttribute('y1','0'); gEdge.setAttribute('x2','162'); gEdge.setAttribute('y2','170'); gEdge.setAttribute('gradientUnits','userSpaceOnUse');
+    const eS1 = document.createElementNS('http://www.w3.org/2000/svg','stop'); eS1.setAttribute('offset','0'); eS1.setAttribute('stop-color','#aaccee'); eS1.setAttribute('stop-opacity','0.6'); gEdge.appendChild(eS1);
+    const eS2 = document.createElementNS('http://www.w3.org/2000/svg','stop'); eS2.setAttribute('offset','1'); eS2.setAttribute('stop-color','#445566'); eS2.setAttribute('stop-opacity','0.2'); gEdge.appendChild(eS2);
+    defs.appendChild(gEdge);
+
+    // Cockpit glass gradient
+    const gCk = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+    gCk.id = 'noseCockpit'; gCk.setAttribute('x1','162'); gCk.setAttribute('y1','20'); gCk.setAttribute('x2','162'); gCk.setAttribute('y2','90'); gCk.setAttribute('gradientUnits','userSpaceOnUse');
+    const cS1 = document.createElementNS('http://www.w3.org/2000/svg','stop'); cS1.setAttribute('offset','0'); cS1.setAttribute('stop-color','#44667a'); cS1.setAttribute('stop-opacity','0.5'); gCk.appendChild(cS1);
+    const cS2 = document.createElementNS('http://www.w3.org/2000/svg','stop'); cS2.setAttribute('offset','1'); cS2.setAttribute('stop-color','#1a2a36'); cS2.setAttribute('stop-opacity','0.8'); gCk.appendChild(cS2);
+    defs.appendChild(gCk);
+
+    // Highlight gradient
+    const gHi = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+    gHi.id = 'noseHighlight'; gHi.setAttribute('x1','100'); gHi.setAttribute('y1','10'); gHi.setAttribute('x2','200'); gHi.setAttribute('y2','60'); gHi.setAttribute('gradientUnits','userSpaceOnUse');
+    const hS1 = document.createElementNS('http://www.w3.org/2000/svg','stop'); hS1.setAttribute('offset','0'); hS1.setAttribute('stop-color','#ffffff'); hS1.setAttribute('stop-opacity','0.15'); gHi.appendChild(hS1);
+    const hS2 = document.createElementNS('http://www.w3.org/2000/svg','stop'); hS2.setAttribute('offset','1'); hS2.setAttribute('stop-color','#ffffff'); hS2.setAttribute('stop-opacity','0'); gHi.appendChild(hS2);
+    defs.appendChild(gHi);
+
+    svg.appendChild(defs);
+
+    // Main hull shape
+    const hull = document.createElementNS('http://www.w3.org/2000/svg','path');
+    hull.setAttribute('d','M10 170 L60 40 Q80 8 162 0 Q244 8 265 40 L315 170 Z');
+    hull.setAttribute('fill','url(#noseHull)');
+    svg.appendChild(hull);
+
+    // Edge highlight stroke
+    const edge = document.createElementNS('http://www.w3.org/2000/svg','path');
+    edge.setAttribute('d','M10 170 L60 40 Q80 8 162 0 Q244 8 265 40 L315 170');
+    edge.setAttribute('fill','none'); edge.setAttribute('stroke','url(#noseEdge)'); edge.setAttribute('stroke-width','1.5');
+    svg.appendChild(edge);
+
+    // Center ridge
+    const ridge = document.createElementNS('http://www.w3.org/2000/svg','line');
+    ridge.setAttribute('x1','162'); ridge.setAttribute('y1','4'); ridge.setAttribute('x2','162'); ridge.setAttribute('y2','170');
+    ridge.setAttribute('stroke','#8ab0cc'); ridge.setAttribute('stroke-opacity','0.15'); ridge.setAttribute('stroke-width','1');
+    svg.appendChild(ridge);
+
+    // Panel lines
+    for (const [x1,y1,x2,y2] of [['90','60','50','170'],['235','60','275','170']]) {
+      const ln = document.createElementNS('http://www.w3.org/2000/svg','line');
+      ln.setAttribute('x1',x1); ln.setAttribute('y1',y1); ln.setAttribute('x2',x2); ln.setAttribute('y2',y2);
+      ln.setAttribute('stroke','#8ab0cc'); ln.setAttribute('stroke-opacity','0.08'); ln.setAttribute('stroke-width','0.8');
+      svg.appendChild(ln);
+    }
+
+    // Cockpit glass
+    const glass = document.createElementNS('http://www.w3.org/2000/svg','ellipse');
+    glass.setAttribute('cx','162'); glass.setAttribute('cy','50'); glass.setAttribute('rx','55'); glass.setAttribute('ry','30');
+    glass.setAttribute('fill','url(#noseCockpit)');
+    svg.appendChild(glass);
+
+    // Glass highlight
+    const glint = document.createElementNS('http://www.w3.org/2000/svg','ellipse');
+    glint.setAttribute('cx','145'); glint.setAttribute('cy','40'); glint.setAttribute('rx','30'); glint.setAttribute('ry','15');
+    glint.setAttribute('fill','url(#noseHighlight)');
+    svg.appendChild(glint);
+
+    nose.appendChild(svg);
+    this.container.appendChild(nose);
 
     overlay.appendChild(this.container);
   }

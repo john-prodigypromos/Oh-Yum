@@ -375,9 +375,12 @@ export class SoundSystem {
     this.musicPlaying = true;
 
     // Create audio element for the battle soundtrack
-    this.musicElement = new Audio('/audio/cyberpunk_battle.ogg');
+    // OGG is preferred but Safari/iOS doesn't support it — fall back to MP3
+    this.musicElement = new Audio();
     this.musicElement.loop = true;
     this.musicElement.volume = 1.0;
+    const canPlayOgg = this.musicElement.canPlayType('audio/ogg; codecs="vorbis"');
+    this.musicElement.src = canPlayOgg ? '/audio/cyberpunk_battle.ogg' : '/audio/battle_loop.mp3';
 
     // Route through Web Audio API for gain control
     this.musicSource = ctx.createMediaElementSource(this.musicElement);
