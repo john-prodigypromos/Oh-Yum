@@ -211,76 +211,80 @@ export function updateArena(
       // Sound + camera shake + intense visual feedback on player hit
       if (evt.target === player) {
         const isShield = evt.shieldHit;
-        cockpitCam.shake(isShield ? 1.2 : 2.5);
+        cockpitCam.shake(isShield ? 3.0 : 5.0);
         if (isShield) state.sound.shieldHit();
         else state.sound.hullHit();
 
         const overlay = document.getElementById('ui-overlay')!;
 
-        // Full-screen damage flash — much more intense
+        // Full-screen damage flash — big, bright, lingers
         const flash = document.createElement('div');
         const color = isShield
-          ? 'rgba(0, 150, 255, 0.4)'    // bright blue for shield
-          : 'rgba(255, 50, 0, 0.5)';     // intense red-orange for hull
+          ? 'rgba(0, 150, 255, 0.6)'    // bright blue for shield
+          : 'rgba(255, 30, 0, 0.7)';     // intense red for hull
         flash.style.cssText = `
           position:fixed;top:0;left:0;width:100%;height:100%;
           background:${color};z-index:40;pointer-events:none;
-          transition:opacity 0.5s ease-out;
+          transition:opacity 0.8s ease-out;
         `;
         overlay.appendChild(flash);
         requestAnimationFrame(() => { flash.style.opacity = '0'; });
-        setTimeout(() => flash.remove(), 600);
+        setTimeout(() => flash.remove(), 900);
 
-        // Damage vignette — dark edges that persist briefly
+        // Damage vignette — heavy dark red edges that persist
         if (!isShield) {
           const vignette = document.createElement('div');
           vignette.style.cssText = `
             position:fixed;top:0;left:0;width:100%;height:100%;
             z-index:39;pointer-events:none;
-            background:radial-gradient(ellipse at center, transparent 40%, rgba(255,0,0,0.3) 100%);
-            transition:opacity 0.8s ease-out;
+            background:radial-gradient(ellipse at center, transparent 30%, rgba(255,0,0,0.45) 100%);
+            transition:opacity 1.2s ease-out;
           `;
           overlay.appendChild(vignette);
           requestAnimationFrame(() => { vignette.style.opacity = '0'; });
-          setTimeout(() => vignette.remove(), 900);
+          setTimeout(() => vignette.remove(), 1300);
         }
 
-        // Shield shimmer effect — blue ripple from edges
+        // Shield shimmer effect — thick blue border + strong glow
         if (isShield) {
           const shimmer = document.createElement('div');
           shimmer.style.cssText = `
             position:fixed;top:0;left:0;width:100%;height:100%;
             z-index:39;pointer-events:none;
-            border:8px solid rgba(0,180,255,0.6);
-            box-shadow:inset 0 0 80px rgba(0,150,255,0.3), inset 0 0 160px rgba(0,100,255,0.15);
-            transition:opacity 0.4s ease-out;
+            border:12px solid rgba(0,180,255,0.8);
+            box-shadow:inset 0 0 120px rgba(0,150,255,0.4), inset 0 0 200px rgba(0,100,255,0.2);
+            transition:opacity 0.6s ease-out;
           `;
           overlay.appendChild(shimmer);
           requestAnimationFrame(() => { shimmer.style.opacity = '0'; });
-          setTimeout(() => shimmer.remove(), 500);
+          setTimeout(() => shimmer.remove(), 700);
         }
 
-        // Directional hit streak — bright line across screen
-        const streak = document.createElement('div');
-        const angle = Math.random() * 360;
-        streak.style.cssText = `
-          position:fixed;top:50%;left:50%;width:200vw;height:3px;
-          transform:translate(-50%,-50%) rotate(${angle}deg);
-          background:linear-gradient(90deg, transparent, ${isShield ? 'rgba(0,200,255,0.6)' : 'rgba(255,100,0,0.7)'}, transparent);
-          z-index:41;pointer-events:none;
-          transition:opacity 0.3s ease-out;
-        `;
-        overlay.appendChild(streak);
-        requestAnimationFrame(() => { streak.style.opacity = '0'; });
-        setTimeout(() => streak.remove(), 400);
+        // Multiple directional hit streaks — 2-3 bright lines across screen
+        const streakCount = isShield ? 1 : 2 + Math.floor(Math.random() * 2);
+        for (let s = 0; s < streakCount; s++) {
+          const streak = document.createElement('div');
+          const sAngle = Math.random() * 360;
+          const thickness = 2 + Math.random() * 4;
+          streak.style.cssText = `
+            position:fixed;top:50%;left:50%;width:200vw;height:${thickness}px;
+            transform:translate(-50%,-50%) rotate(${sAngle}deg);
+            background:linear-gradient(90deg, transparent 20%, ${isShield ? 'rgba(0,200,255,0.8)' : 'rgba(255,80,0,0.9)'} 50%, transparent 80%);
+            z-index:41;pointer-events:none;
+            transition:opacity 0.5s ease-out;
+          `;
+          overlay.appendChild(streak);
+          setTimeout(() => { streak.style.opacity = '0'; }, s * 50);
+          setTimeout(() => streak.remove(), 600 + s * 50);
+        }
 
         // Critical damage warning — persistent red pulse when hull is low
-        if (player.damagePct > 0.6) {
+        if (player.damagePct > 0.5) {
           const warning = document.createElement('div');
           warning.style.cssText = `
             position:fixed;top:0;left:0;width:100%;height:100%;
             z-index:38;pointer-events:none;
-            background:radial-gradient(ellipse at center, transparent 30%, rgba(180,0,0,0.15) 100%);
+            background:radial-gradient(ellipse at center, transparent 20%, rgba(200,0,0,0.25) 100%);
             animation:critPulse 0.5s ease-in-out;
           `;
           overlay.appendChild(warning);
