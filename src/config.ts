@@ -7,8 +7,8 @@ export const runtime = { GAME_WIDTH: 1280 };
 
 // ── 3D Arena ──
 export const ARENA = {
-  RADIUS: 12000,           // large arena for hunting gameplay
-  BOUNDARY_WARN: 11000,    // distance at which HUD warns player
+  RADIUS: 200000,          // massive arena for long-range hunting
+  BOUNDARY_WARN: 190000,
 } as const;
 
 export const PHYSICS = {
