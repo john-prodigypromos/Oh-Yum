@@ -3,7 +3,6 @@ import { createEnemyShipGeometry, createPlayerShipGeometry } from './ships/ShipG
 import { createPlayerMaterials, createEnemyMaterials, applyMaterials } from './ships/ShipMaterials';
 import { createAsteroidMesh } from './systems/EnvironmentLoader';
 import { createPlanet as createPlanetFromProfile, PLANET_COUNT } from './renderer/Environment';
-import { createCanyonTerrain, type CanyonTerrain } from './terrain/CanyonGeometry';
 
 // ── Scene ──
 const scene = new THREE.Scene();
@@ -70,7 +69,7 @@ const ORBIT_DIST: Record<ViewerObject, number> = {
   blackhole: 600,
   planet: 1000,
   moon: 220,
-  marsbase: 25000,
+  marsbase: 2200,
 };
 
 const DESCRIPTIONS: Record<ViewerObject, string> = {
@@ -524,36 +523,211 @@ function setLighting(mode: 'ship' | 'blackhole' | 'planet') {
   }
 }
 
-// ── Mars Base loader ──
-let canyonRef: CanyonTerrain | null = null;
-
+// ── Mars Base loader — standalone sphere (no canyon geometry) ──
 function loadMarsBase() {
   clearCurrent();
-  if (canyonRef) {
-    canyonRef.cleanup();
-    canyonRef = null;
+
+  const marsGroup = new THREE.Group();
+  const RADIUS = 800;
+
+  // Procedural Mars texture
+  const texSize = 2048;
+  const c = document.createElement('canvas');
+  c.width = texSize; c.height = texSize;
+  const ctx = c.getContext('2d')!;
+  let _s = 42 + 777;
+  const _r = () => { _s = (_s * 16807 + 7) % 2147483647; return (_s - 1) / 2147483646; };
+
+  // Base rusty gradient
+  const bg = ctx.createRadialGradient(texSize * 0.4, texSize * 0.5, 0, texSize * 0.5, texSize * 0.5, texSize * 0.7);
+  bg.addColorStop(0, '#8a5030');
+  bg.addColorStop(0.3, '#7a4528');
+  bg.addColorStop(0.6, '#6a3a20');
+  bg.addColorStop(1, '#5a3018');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, texSize, texSize);
+
+  // Highland regions
+  for (let i = 0; i < 80; i++) {
+    const cx = _r() * texSize, cy = _r() * texSize, cr = 20 + _r() * 250;
+    const g = ctx.createRadialGradient(cx, cy, cr * 0.05, cx, cy, cr);
+    const dark = _r() > 0.5;
+    g.addColorStop(0, dark ? `rgba(35, 15, 8, ${0.2 + _r() * 0.25})` : `rgba(140, 80, 40, ${0.1 + _r() * 0.15})`);
+    g.addColorStop(0.5, dark ? `rgba(45, 20, 10, ${0.1 + _r() * 0.1})` : `rgba(120, 70, 35, 0.05)`);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.fill();
   }
 
-  canyonRef = createCanyonTerrain(scene, 42);
-  scene.add(canyonRef.group);
-  currentGroup = canyonRef.group;
-  // Orbit around the canyon center (canyon is centered at origin, floor at y=0)
-  // Camera will orbit looking at a point above the canyon floor
+  // Impact craters
+  for (let i = 0; i < 50; i++) {
+    const cx = _r() * texSize, cy = _r() * texSize, cr = 3 + _r() * 60;
+    const sg = ctx.createRadialGradient(cx - cr * 0.15, cy - cr * 0.15, 0, cx, cy, cr);
+    sg.addColorStop(0, `rgba(30, 12, 6, ${0.15 + _r() * 0.2})`);
+    sg.addColorStop(0.6, `rgba(40, 18, 8, 0.05)`);
+    sg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sg;
+    ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = `rgba(160, 100, 60, ${0.1 + _r() * 0.15})`;
+    ctx.lineWidth = 1 + _r() * 3;
+    ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.stroke();
+    if (cr > 25) {
+      const rays = 4 + Math.floor(_r() * 5);
+      for (let j = 0; j < rays; j++) {
+        const a = _r() * Math.PI * 2, rl = cr * (1.5 + _r() * 2);
+        ctx.strokeStyle = `rgba(150, 95, 55, ${0.04 + _r() * 0.06})`;
+        ctx.lineWidth = 1 + _r() * 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a) * cr, cy + Math.sin(a) * cr);
+        ctx.lineTo(cx + Math.cos(a) * rl, cy + Math.sin(a) * rl);
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Subtle canyon scar — just a faint dark hairline, the 3D geometry does the rest
+  ctx.save();
+  ctx.translate(texSize * 0.25, texSize * 0.42);
+  ctx.rotate(-0.08);
+  const canyonLen = texSize * 0.35;
+  // Soft dark shadow — barely visible
+  const sg2 = ctx.createLinearGradient(0, -8, 0, 8);
+  sg2.addColorStop(0, 'rgba(0,0,0,0)');
+  sg2.addColorStop(0.4, 'rgba(40, 18, 8, 0.15)');
+  sg2.addColorStop(0.5, 'rgba(20, 8, 4, 0.3)');
+  sg2.addColorStop(0.6, 'rgba(40, 18, 8, 0.15)');
+  sg2.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = sg2;
+  ctx.fillRect(0, -8, canyonLen, 16);
+  ctx.restore();
+
+  // Noise grain
+  const imgData = ctx.getImageData(0, 0, texSize, texSize);
+  const px = imgData.data;
+  for (let i = 0; i < px.length; i += 4) {
+    const n = (_r() - 0.5) * 12;
+    px[i] = Math.max(0, Math.min(255, px[i] + n));
+    px[i+1] = Math.max(0, Math.min(255, px[i+1] + n * 0.7));
+    px[i+2] = Math.max(0, Math.min(255, px[i+2] + n * 0.5));
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+
+  const sphere = new THREE.Mesh(
+    new THREE.SphereGeometry(RADIUS, 128, 96),
+    new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, metalness: 0.02 }),
+  );
+  marsGroup.add(sphere);
+
+  // 3D canyon trench on the sphere surface
+  // Canyon sits ~25° north of equator, ~40° from center longitude
+  const canyonLat = 0.15;   // radians north
+  const canyonLon = -0.55;  // radians from front
+  const canyonLength = 280; // units along surface
+  const canyonDepth = 4;
+  const canyonWidth = 3;
+  const canyonSegs = 60;
+
+  const wallMat = new THREE.MeshStandardMaterial({
+    color: 0x5a3018,
+    roughness: 0.95,
+    metalness: 0.02,
+    side: THREE.DoubleSide,
+  });
+  const floorMat = new THREE.MeshStandardMaterial({
+    color: 0x2a1508,
+    roughness: 0.98,
+    metalness: 0.01,
+  });
+
+  // Build canyon as a series of quads following the sphere curvature
+  for (let side = -1; side <= 1; side += 2) {
+    const wallGeo = new THREE.BufferGeometry();
+    const verts: number[] = [];
+    const norms: number[] = [];
+    for (let i = 0; i <= canyonSegs; i++) {
+      const t = i / canyonSegs - 0.5;
+      const lon = canyonLon + t * (canyonLength / RADIUS);
+      const lat = canyonLat + t * 0.08; // slight curve
+      const nx = Math.cos(lat) * Math.sin(lon);
+      const ny = Math.sin(lat);
+      const nz = Math.cos(lat) * Math.cos(lon);
+      // Surface point
+      const sx = nx * RADIUS, sy = ny * RADIUS, sz = nz * RADIUS;
+      // Offset sideways along the surface tangent
+      const tangentX = Math.cos(lon), tangentZ = -Math.sin(lon);
+      const ox = tangentX * canyonWidth * side * 0.5;
+      const oz = tangentZ * canyonWidth * side * 0.5;
+      // Top of wall (at surface)
+      verts.push(sx + ox, sy, sz + oz);
+      norms.push(nx * side, 0, nz * side);
+      // Bottom of wall (inset)
+      verts.push(sx + ox - nx * canyonDepth, sy - ny * canyonDepth, sz + oz - nz * canyonDepth);
+      norms.push(nx * side, 0, nz * side);
+    }
+    const indices: number[] = [];
+    for (let i = 0; i < canyonSegs; i++) {
+      const a = i * 2, b = a + 1, c2 = a + 2, d = a + 3;
+      indices.push(a, b, c2, b, d, c2);
+    }
+    wallGeo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+    wallGeo.setAttribute('normal', new THREE.Float32BufferAttribute(norms, 3));
+    wallGeo.setIndex(indices);
+    marsGroup.add(new THREE.Mesh(wallGeo, wallMat));
+  }
+
+  // Canyon floor
+  const floorGeo = new THREE.BufferGeometry();
+  const fv: number[] = [], fn: number[] = [], fi: number[] = [];
+  for (let i = 0; i <= canyonSegs; i++) {
+    const t = i / canyonSegs - 0.5;
+    const lon = canyonLon + t * (canyonLength / RADIUS);
+    const lat = canyonLat + t * 0.08;
+    const nx = Math.cos(lat) * Math.sin(lon);
+    const ny = Math.sin(lat);
+    const nz = Math.cos(lat) * Math.cos(lon);
+    const tangentX = Math.cos(lon), tangentZ = -Math.sin(lon);
+    for (let side = -1; side <= 1; side += 2) {
+      const ox = tangentX * canyonWidth * side * 0.5;
+      const oz = tangentZ * canyonWidth * side * 0.5;
+      fv.push(
+        nx * RADIUS + ox - nx * canyonDepth,
+        ny * RADIUS - ny * canyonDepth,
+        nz * RADIUS + oz - nz * canyonDepth,
+      );
+      fn.push(nx, ny, nz);
+    }
+  }
+  for (let i = 0; i < canyonSegs; i++) {
+    const a = i * 2, b = a + 1, c2 = a + 2, d = a + 3;
+    fi.push(a, c2, b, b, c2, d);
+  }
+  floorGeo.setAttribute('position', new THREE.Float32BufferAttribute(fv, 3));
+  floorGeo.setAttribute('normal', new THREE.Float32BufferAttribute(fn, 3));
+  floorGeo.setIndex(fi);
+  marsGroup.add(new THREE.Mesh(floorGeo, floorMat));
+
+  // Thin atmosphere glow
+  const atmoGeo = new THREE.SphereGeometry(RADIUS * 1.015, 64, 32);
+  const atmoMat = new THREE.MeshBasicMaterial({
+    color: 0xcc6633,
+    transparent: true,
+    opacity: 0.08,
+    side: THREE.BackSide,
+  });
+  marsGroup.add(new THREE.Mesh(atmoGeo, atmoMat));
+
+  scene.add(marsGroup);
+  currentGroup = marsGroup;
   grid.visible = false;
   setLighting('planet');
-  // Brighter Mars sun
   keyLight.position.set(3000, 2000, -1000);
   keyLight.intensity = 2.0;
   ambientLight.intensity = 0.5;
-
-  updateFn = null; // static scene, just orbit
-  // Override cleanup to also clean canyon
-  cleanupExtras = () => {
-    if (canyonRef) {
-      canyonRef.cleanup();
-      canyonRef = null;
-    }
-  };
+  updateFn = null;
 }
 
 // ── Loader dispatch ──

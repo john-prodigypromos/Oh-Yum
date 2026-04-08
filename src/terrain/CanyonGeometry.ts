@@ -427,64 +427,31 @@ export function createMesas(
 
 // ── 5. Base Equipment ────────────────────────────────────
 
-/** Creates a single geodesic dome with wireframe overlay and copper top. */
+/** Creates a single geodesic dome — solid half-sphere, no wireframe. */
 function createDome(radius: number, px: number, pz: number): THREE.Group {
   const domeGroup = new THREE.Group();
-  const detail = radius > 15 ? 3 : 2;
 
-  // Dome shell — half icosahedron (clip bottom half)
-  const shellGeo = new THREE.IcosahedronGeometry(radius, detail);
-  const shellPos = shellGeo.attributes.position as THREE.BufferAttribute;
-  // Push vertices below equator up to equator (creates flat bottom)
-  for (let i = 0; i < shellPos.count; i++) {
-    if (shellPos.getY(i) < 0) shellPos.setY(i, 0);
-  }
-  shellGeo.computeVertexNormals();
-
-  // Shell material — white/light grey panels
+  // Solid dome shell — upper hemisphere
+  const shellGeo = new THREE.SphereGeometry(radius, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2);
   const shellMat = new THREE.MeshStandardMaterial({
-    color: 0xd8dce0,
-    roughness: 0.3,
-    metalness: 0.4,
-    side: THREE.DoubleSide,
+    color: 0xd0d8e0,
+    roughness: 0.2,
+    metalness: 0.6,
   });
   domeGroup.add(new THREE.Mesh(shellGeo, shellMat));
 
-  // Wireframe overlay — dark structural grid lines
-  const wireGeo = new THREE.IcosahedronGeometry(radius * 1.003, detail);
-  const wirePos = wireGeo.attributes.position as THREE.BufferAttribute;
-  for (let i = 0; i < wirePos.count; i++) {
-    if (wirePos.getY(i) < 0) wirePos.setY(i, 0);
-  }
-  const wireMat = new THREE.MeshBasicMaterial({
-    color: 0x334455,
-    wireframe: true,
-  });
-  domeGroup.add(new THREE.Mesh(wireGeo, wireMat));
+  // Structural ribs — EdgesGeometry on a lower-poly version for clean panel lines
+  const ribGeo = new THREE.SphereGeometry(radius * 1.003, 10, 5, 0, Math.PI * 2, 0, Math.PI / 2);
+  const edges = new THREE.EdgesGeometry(ribGeo, 1);
+  const ribMat = new THREE.LineBasicMaterial({ color: 0x3a4a5a, linewidth: 1 });
+  domeGroup.add(new THREE.LineSegments(edges, ribMat));
 
-  // Copper/orange top cap — upper hemisphere tinted
-  const capGeo = new THREE.IcosahedronGeometry(radius * 0.6, detail);
-  const capPos = capGeo.attributes.position as THREE.BufferAttribute;
-  for (let i = 0; i < capPos.count; i++) {
-    if (capPos.getY(i) < radius * 0.25) capPos.setY(i, radius * 0.25);
-  }
-  capGeo.computeVertexNormals();
-  const capMat = new THREE.MeshStandardMaterial({
-    color: 0xcc6633,
-    roughness: 0.4,
-    metalness: 0.5,
-    side: THREE.DoubleSide,
-  });
-  const cap = new THREE.Mesh(capGeo, capMat);
-  cap.position.y = radius * 0.35;
-  domeGroup.add(cap);
-
-  // Base ring — cylindrical foundation
-  const baseGeo = new THREE.CylinderGeometry(radius * 1.05, radius * 1.1, radius * 0.15, 24);
+  // Base ring — concrete foundation
+  const baseGeo = new THREE.CylinderGeometry(radius * 1.08, radius * 1.12, radius * 0.15, 32);
   const baseMat = new THREE.MeshStandardMaterial({
-    color: 0x888888,
-    roughness: 0.6,
-    metalness: 0.5,
+    color: 0x666666,
+    roughness: 0.7,
+    metalness: 0.3,
   });
   const base = new THREE.Mesh(baseGeo, baseMat);
   base.position.y = radius * 0.075;
@@ -521,13 +488,14 @@ export function createBaseColony(): THREE.Group {
   const group = new THREE.Group();
 
   // Dome positions and sizes [radius, x, z] — near player start at z=-8000
-  const bz = -8000; // base Z, matching player spawn
+  // Scaled up so domes are visible from orbit distance
+  const bz = -8000;
   const domes: [number, number, number][] = [
-    [25, -50, bz - 40],    // large central dome
-    [18, -90, bz - 30],    // medium left
-    [15, -40, bz - 80],    // medium right-back
-    [20, -80, bz - 75],    // medium far
-    [12, -110, bz - 60],   // small far-left
+    [200, -400, bz - 300],   // large central dome
+    [140, -720, bz - 200],   // medium left
+    [120, -300, bz - 650],   // medium right-back
+    [160, -640, bz - 600],   // medium far
+    [100, -900, bz - 450],   // small far-left
   ];
 
   for (const [r, x, z] of domes) {
@@ -535,14 +503,14 @@ export function createBaseColony(): THREE.Group {
   }
 
   // Connecting corridors between adjacent domes
-  group.add(createCorridor(-50, bz - 40, -90, bz - 30, 3));
-  group.add(createCorridor(-50, bz - 40, -40, bz - 80, 3));
-  group.add(createCorridor(-90, bz - 30, -80, bz - 75, 2.5));
-  group.add(createCorridor(-90, bz - 30, -110, bz - 60, 2));
-  group.add(createCorridor(-80, bz - 75, -40, bz - 80, 2.5));
+  group.add(createCorridor(-400, bz - 300, -720, bz - 200, 20));
+  group.add(createCorridor(-400, bz - 300, -300, bz - 650, 20));
+  group.add(createCorridor(-720, bz - 200, -640, bz - 600, 16));
+  group.add(createCorridor(-720, bz - 200, -900, bz - 450, 14));
+  group.add(createCorridor(-640, bz - 600, -300, bz - 650, 16));
 
   // Flat pad area under the colony
-  const padGeo = new THREE.CircleGeometry(80, 32);
+  const padGeo = new THREE.CircleGeometry(600, 32);
   padGeo.rotateX(-Math.PI / 2);
   const padMat = new THREE.MeshStandardMaterial({
     color: 0x606060,
@@ -550,7 +518,7 @@ export function createBaseColony(): THREE.Group {
     metalness: 0.2,
   });
   const pad = new THREE.Mesh(padGeo, padMat);
-  pad.position.set(-70, 0.1, bz - 55);
+  pad.position.set(-550, 0.1, bz - 420);
   group.add(pad);
 
   return group;
@@ -582,17 +550,11 @@ export function createCanyonTerrain(
   const floor = createFloor(config, seed);
   group.add(floor);
 
-  // ── Geodesic dome colony near the launch pad ──
-  const colony = createBaseColony();
-  group.add(colony);
+  // Colony structures disabled — rendering as dot clouds at orbit scale
+  // TODO: revisit dome rendering when viewed from inside the canyon
 
-  // ── Mars surface — 4 plane segments around the canyon slot ──
-  // No ShapeGeometry holes (causes triangulation artifacts).
-  // Instead: left plane, right plane, front cap, back cap.
-  const SURFACE_EXTENT = 100000;
-  const slotHalfW = config.topWidth + 10;
-  const slotHalfZ = config.length / 2 + 50;
-  const surfaceY = config.wallHeight;
+  // ── Mars planet sphere — massive textured surface ──
+  const MARS_RADIUS = 100000;
 
   // ── Procedural Mars surface texture ──
   const texSize = 2048;
@@ -655,36 +617,6 @@ export function createCanyonTerrain(
     }
   }
 
-  // Channel/valley features (ancient river beds)
-  for (let i = 0; i < 8; i++) {
-    mCtx.strokeStyle = `rgba(50, 22, 10, ${0.08 + _mr() * 0.1})`;
-    mCtx.lineWidth = 2 + _mr() * 5;
-    mCtx.beginPath();
-    let cx = _mr() * texSize, cy = _mr() * texSize;
-    mCtx.moveTo(cx, cy);
-    for (let s = 0; s < 6; s++) {
-      cx += (_mr() - 0.5) * 300;
-      cy += (_mr() - 0.5) * 300;
-      mCtx.quadraticCurveTo(cx + (_mr() - 0.5) * 100, cy + (_mr() - 0.5) * 100, cx, cy);
-    }
-    mCtx.stroke();
-  }
-
-  // Dust devil tracks (thin dark curved lines)
-  for (let i = 0; i < 15; i++) {
-    mCtx.strokeStyle = `rgba(40, 18, 8, ${0.06 + _mr() * 0.06})`;
-    mCtx.lineWidth = 0.5 + _mr() * 1.5;
-    mCtx.beginPath();
-    let dx = _mr() * texSize, dy = _mr() * texSize;
-    mCtx.moveTo(dx, dy);
-    for (let s = 0; s < 8; s++) {
-      dx += (_mr() - 0.5) * 80;
-      dy += (_mr() - 0.3) * 60;
-      mCtx.lineTo(dx, dy);
-    }
-    mCtx.stroke();
-  }
-
   // Fine noise grain overlay
   const imgData = mCtx.getImageData(0, 0, texSize, texSize);
   const pixels = imgData.data;
@@ -697,57 +629,18 @@ export function createCanyonTerrain(
   mCtx.putImageData(imgData, 0, 0);
 
   const marsTex = new THREE.CanvasTexture(marsCanvas);
-  marsTex.wrapS = THREE.RepeatWrapping;
-  marsTex.wrapT = THREE.RepeatWrapping;
-  marsTex.repeat.set(4, 4); // tile for detail at distance
   marsTex.colorSpace = THREE.SRGBColorSpace;
-  marsTex.anisotropy = 8;
+  marsTex.anisotropy = 4;
 
-  const surfaceMat = new THREE.MeshStandardMaterial({
+  const marsMat = new THREE.MeshStandardMaterial({
     map: marsTex,
     roughness: 0.92,
-    metalness: 0.03,
-    side: THREE.DoubleSide,
+    metalness: 0.02,
   });
-
-  // Left surface (extends from canyon left wall to far left)
-  const leftSurf = new THREE.Mesh(
-    new THREE.PlaneGeometry(SURFACE_EXTENT, config.length + SURFACE_EXTENT * 2),
-    surfaceMat,
-  );
-  leftSurf.rotation.x = -Math.PI / 2;
-  leftSurf.position.set(-slotHalfW - SURFACE_EXTENT / 2, surfaceY, 0);
-  group.add(leftSurf);
-
-  // Right surface
-  const rightSurf = new THREE.Mesh(
-    new THREE.PlaneGeometry(SURFACE_EXTENT, config.length + SURFACE_EXTENT * 2),
-    surfaceMat,
-  );
-  rightSurf.rotation.x = -Math.PI / 2;
-  rightSurf.position.set(slotHalfW + SURFACE_EXTENT / 2, surfaceY, 0);
-  group.add(rightSurf);
-
-  // Front cap (closes the gap in front of the canyon, between left and right)
-  const frontSurf = new THREE.Mesh(
-    new THREE.PlaneGeometry(slotHalfW * 2, SURFACE_EXTENT),
-    surfaceMat,
-  );
-  frontSurf.rotation.x = -Math.PI / 2;
-  frontSurf.position.set(0, surfaceY, -slotHalfZ - SURFACE_EXTENT / 2);
-  group.add(frontSurf);
-
-  // Back cap
-  const backSurf = new THREE.Mesh(
-    new THREE.PlaneGeometry(slotHalfW * 2, SURFACE_EXTENT),
-    surfaceMat,
-  );
-  backSurf.rotation.x = -Math.PI / 2;
-  backSurf.position.set(0, surfaceY, slotHalfZ + SURFACE_EXTENT / 2);
-  group.add(backSurf);
-
-  // No background sphere — surface planes + red atmosphere handle the ground.
-  // The sphere was filling the canyon from inside due to its curvature.
+  const marsGeo = new THREE.SphereGeometry(MARS_RADIUS, 128, 96);
+  const marsSphere = new THREE.Mesh(marsGeo, marsMat);
+  marsSphere.position.y = -MARS_RADIUS + config.wallHeight;
+  group.add(marsSphere);
 
   // ── End wall — blocks the far end, forces player to climb UP ──
   const endWallGeo = new THREE.PlaneGeometry(config.topWidth * 2.5, config.wallHeight, 30, 20);
