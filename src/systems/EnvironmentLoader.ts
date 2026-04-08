@@ -167,6 +167,7 @@ export function createAsteroidBelt(scene: THREE.Scene): LevelEnvironment {
       // Bolt-asteroid collisions — asteroids take damage from lasers
       if (boltPool) {
         for (const bolt of boltPool.getActive()) {
+          if (!bolt.active) continue;
           _tmpDiff.subVectors(bolt.mesh.position, ast.mesh.position);
           const dist = _tmpDiff.length();
           if (dist < ast.radius) {

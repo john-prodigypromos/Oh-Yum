@@ -147,19 +147,48 @@ function blobRadius(): string {
 
 export class ExplosionPool {
   private overlay: HTMLElement;
+  private pool: HTMLDivElement[] = [];
+  private activeCount = 0;
+  private static MAX_ACTIVE = 40; // hard cap on simultaneous DOM elements
 
   constructor() {
     injectCSS();
     this.overlay = document.getElementById('ui-overlay') || document.body;
+    // Pre-allocate pool
+    for (let i = 0; i < ExplosionPool.MAX_ACTIVE; i++) {
+      const el = document.createElement('div');
+      el.className = 'explosion-fx';
+      el.style.display = 'none';
+      this.overlay.appendChild(el);
+      this.pool.push(el);
+    }
+  }
+
+  private acquire(): HTMLDivElement | null {
+    if (this.activeCount >= ExplosionPool.MAX_ACTIVE) return null;
+    for (const el of this.pool) {
+      if (el.style.display === 'none') {
+        this.activeCount++;
+        return el;
+      }
+    }
+    return null;
+  }
+
+  private release(el: HTMLDivElement, delayMs: number): void {
+    setTimeout(() => {
+      el.style.display = 'none';
+      el.style.animation = 'none';
+      this.activeCount--;
+    }, delayMs);
   }
 
   /** Spawn a single explosion element at screen pixel coordinates */
   spawnAt(screenX: number, screenY: number, size: number, anim: string, duration: number, extraStyle = ''): void {
-    const el = document.createElement('div');
-    el.className = 'explosion-fx';
+    const el = this.acquire();
+    if (!el) return; // at capacity — skip gracefully
     el.style.cssText = `left:${screenX}px;top:${screenY}px;width:${size}px;height:${size}px;display:block;animation:${anim} ${duration}s ease-out forwards;border-radius:${blobRadius()};${extraStyle}`;
-    this.overlay.appendChild(el);
-    setTimeout(() => el.remove(), duration * 1000 + 100);
+    this.release(el, duration * 1000 + 100);
   }
 
   /** Small impact flash */
@@ -178,12 +207,13 @@ export class ExplosionPool {
     const w = window.innerWidth;
     const h = window.innerHeight;
 
+    const _projV = new THREE.Vector3();
     const project = (): { x: number; y: number; visible: boolean } => {
-      const proj = worldPos.clone().project(camera);
+      _projV.copy(worldPos).project(camera);
       return {
-        x: (proj.x * 0.5 + 0.5) * w,
-        y: (-proj.y * 0.5 + 0.5) * h,
-        visible: proj.z < 1,
+        x: (_projV.x * 0.5 + 0.5) * w,
+        y: (-_projV.y * 0.5 + 0.5) * h,
+        visible: _projV.z < 1,
       };
     };
 
@@ -195,11 +225,12 @@ export class ExplosionPool {
     const pos0 = project();
     if (!pos0.visible) return;
 
-    // ── Screen flash — brief bright overlay ──  (1 piece)
-    const flash = document.createElement('div');
-    flash.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,200,120,0.2);z-index:9998;pointer-events:none;animation:boom-flash 0.3s ease-out forwards;`;
-    this.overlay.appendChild(flash);
-    setTimeout(() => flash.remove(), 400);
+    // ── Screen flash — brief bright overlay ──
+    const flash = this.acquire();
+    if (flash) {
+      flash.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,200,120,0.2);z-index:9998;pointer-events:none;display:block;animation:boom-flash 0.3s ease-out forwards;`;
+      this.release(flash, 400);
+    }
 
     // ── Shockwave rings ──  (3 pieces)
     this.spawnAt(pos0.x, pos0.y, 260, 'boom-ring', 0.5, 'background:transparent;');
@@ -212,8 +243,8 @@ export class ExplosionPool {
     this.spawnAt(pos0.x + jit(20), pos0.y + jit(20), 140, 'boom1', 2.0);
     this.spawnAt(pos0.x + jit(10), pos0.y + jit(10), 200, 'boom2', 2.3);
 
-    // ── Secondary fireballs — staggered waves ──  (12 pieces)
-    for (let i = 0; i < 12; i++) {
+    // ── Secondary fireballs — staggered waves ──
+    for (let i = 0; i < 5; i++) {
       const delay = i * 40 + Math.random() * 100;
       const size = 80 + Math.random() * 120;
       setTimeout(() => {
@@ -224,8 +255,8 @@ export class ExplosionPool {
       }, delay);
     }
 
-    // ── Smoke clouds — large dark billowing ──  (15 pieces)
-    for (let i = 0; i < 15; i++) {
+    // ── Smoke clouds — large dark billowing ──
+    for (let i = 0; i < 6; i++) {
       const delay = 50 + Math.random() * 800;
       const size = 80 + Math.random() * 140;
       setTimeout(() => {
@@ -236,8 +267,8 @@ export class ExplosionPool {
       }, delay);
     }
 
-    // ── Delayed fireballs — sustained burn ──  (30 pieces)
-    for (let i = 0; i < 30; i++) {
+    // ── Delayed fireballs — sustained burn ──
+    for (let i = 0; i < 10; i++) {
       const delay = 20 + Math.random() * 1400;
       const size = 30 + Math.random() * 110;
       setTimeout(() => {
@@ -248,8 +279,8 @@ export class ExplosionPool {
       }, delay);
     }
 
-    // ── Ember sparks — tiny bright fast ──  (30 pieces)
-    for (let i = 0; i < 30; i++) {
+    // ── Ember sparks — tiny bright fast ──
+    for (let i = 0; i < 10; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 20 + Math.random() * 120;
       const delay = Math.random() * 600;
@@ -265,8 +296,8 @@ export class ExplosionPool {
       }, delay);
     }
 
-    // ── Debris chunks — tumbling outward ──  (50 pieces)
-    for (let i = 0; i < 50; i++) {
+    // ── Debris chunks — tumbling outward ──
+    for (let i = 0; i < 15; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 20 + Math.random() * 150;
       const delay = Math.random() * 500;
@@ -278,18 +309,9 @@ export class ExplosionPool {
         if (pos.visible) {
           const dx = Math.cos(angle) * dist;
           const dy = Math.sin(angle) * dist;
-          const el = document.createElement('div');
-          el.className = 'explosion-fx';
-          el.style.cssText = `
-            left:${pos.x + dx}px;top:${pos.y + dy}px;
-            width:${w2}px;height:${h2}px;display:block;
-            border-radius:2px;
-            transform-origin:center;
-            animation:boom-debris ${0.5 + Math.random() * 0.8}s ease-out forwards;
-            transform:translate(-50%,-50%) rotate(${rot}deg);
-          `;
-          this.overlay.appendChild(el);
-          setTimeout(() => el.remove(), 1500);
+          const dur = 0.5 + Math.random() * 0.8;
+          this.spawnAt(pos.x + dx, pos.y + dy, w2, 'boom-debris', dur,
+            `height:${h2}px;border-radius:2px;transform-origin:center;transform:translate(-50%,-50%) rotate(${rot}deg);`);
         }
       }, delay);
     }
@@ -301,46 +323,45 @@ export class ExplosionPool {
     const fireAnims = ['boom1', 'boom2', 'boom3'];
     const rAnim = () => fireAnims[Math.floor(Math.random() * fireAnims.length)];
 
-    // Screen flash (1)
-    const flash = document.createElement('div');
-    flash.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,200,120,0.2);z-index:9998;pointer-events:none;animation:boom-flash 0.3s ease-out forwards;`;
-    this.overlay.appendChild(flash);
-    setTimeout(() => flash.remove(), 400);
+    // Screen flash
+    const flash2 = this.acquire();
+    if (flash2) {
+      flash2.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(255,200,120,0.2);z-index:9998;pointer-events:none;display:block;animation:boom-flash 0.3s ease-out forwards;`;
+      this.release(flash2, 400);
+    }
 
-    // Shockwave rings (3)
+    // Shockwave rings (2)
     this.spawnAt(screenX, screenY, 260, 'boom-ring', 0.5, 'background:transparent;');
     this.spawnAt(screenX, screenY, 180, 'boom-ring', 0.7, 'background:transparent;');
-    this.spawnAt(screenX, screenY, 320, 'boom-ring', 0.9, 'background:transparent;');
 
-    // Core blasts (4)
+    // Core blasts (3)
     this.spawnAt(screenX, screenY, 240, 'boom1', 2.5);
     this.spawnAt(screenX + jit(15), screenY + jit(15), 180, 'boom1', 2.2);
-    this.spawnAt(screenX + jit(20), screenY + jit(20), 140, 'boom1', 2.0);
     this.spawnAt(screenX + jit(10), screenY + jit(10), 200, 'boom2', 2.3);
 
-    // Secondary fireballs (12)
-    for (let i = 0; i < 12; i++) {
+    // Secondary fireballs (5)
+    for (let i = 0; i < 5; i++) {
       setTimeout(() => {
         this.spawnAt(screenX + jit(50), screenY + jit(50), 80 + Math.random() * 120, rAnim(), rDur());
       }, i * 40 + Math.random() * 100);
     }
 
-    // Smoke clouds (15)
-    for (let i = 0; i < 15; i++) {
+    // Smoke clouds (4)
+    for (let i = 0; i < 4; i++) {
       setTimeout(() => {
         this.spawnAt(screenX + jit(80), screenY + jit(60), 80 + Math.random() * 140, 'boom-smoke', 2.0 + Math.random() * 1.5);
       }, 50 + Math.random() * 800);
     }
 
-    // Delayed fireballs (30)
-    for (let i = 0; i < 30; i++) {
+    // Delayed fireballs (6)
+    for (let i = 0; i < 6; i++) {
       setTimeout(() => {
         this.spawnAt(screenX + jit(100), screenY + jit(100), 30 + Math.random() * 110, rAnim(), rDur());
       }, 20 + Math.random() * 1400);
     }
 
-    // Ember sparks (30)
-    for (let i = 0; i < 30; i++) {
+    // Ember sparks (8)
+    for (let i = 0; i < 8; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 20 + Math.random() * 120;
       setTimeout(() => {
@@ -349,8 +370,8 @@ export class ExplosionPool {
       }, Math.random() * 600);
     }
 
-    // Debris chunks (50)
-    for (let i = 0; i < 50; i++) {
+    // Debris chunks (10)
+    for (let i = 0; i < 10; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 20 + Math.random() * 150;
       const w2 = 3 + Math.random() * 9;
@@ -358,18 +379,10 @@ export class ExplosionPool {
       const rot = Math.floor(Math.random() * 360);
       const dx = Math.cos(angle) * dist;
       const dy = Math.sin(angle) * dist;
+      const dur = 0.4 + Math.random() * 0.9;
       setTimeout(() => {
-        const el = document.createElement('div');
-        el.className = 'explosion-fx';
-        el.style.cssText = `
-          left:${screenX + dx}px;top:${screenY + dy}px;
-          width:${w2}px;height:${h2}px;display:block;
-          border-radius:2px;transform-origin:center;
-          animation:boom-debris ${0.4 + Math.random() * 0.9}s ease-out forwards;
-          transform:translate(-50%,-50%) rotate(${rot}deg);
-        `;
-        this.overlay.appendChild(el);
-        setTimeout(() => el.remove(), 1500);
+        this.spawnAt(screenX + dx, screenY + dy, w2, 'boom-debris', dur,
+          `height:${h2}px;border-radius:2px;transform-origin:center;transform:translate(-50%,-50%) rotate(${rot}deg);`);
       }, Math.random() * 500);
     }
   }

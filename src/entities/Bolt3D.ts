@@ -135,8 +135,8 @@ export class BoltPool {
     bolt.glow.visible = false;
   }
 
-  /** Get all active bolts. */
-  getActive(): BoltData[] {
-    return this.bolts.filter(b => b.active);
+  /** Get all active bolts — returns full array, check .active before use. */
+  getActive(): readonly BoltData[] {
+    return this.bolts;
   }
 }

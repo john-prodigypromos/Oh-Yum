@@ -48,12 +48,12 @@ export function createRenderer(canvas: HTMLCanvasElement): RendererBundle {
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
 
-  // Bloom — full resolution, tuned for subtle star glow + bright engine flare
+  // Bloom — reduced on mobile for performance
   const bloomPass = new UnrealBloomPass(
-    new THREE.Vector2(w, h),
-    0.55,  // strength — visible but not overpowering
-    0.5,   // radius — moderate spread
-    0.82,  // threshold — only catches genuinely bright emissives + engine glow
+    new THREE.Vector2(isMobile ? w / 2 : w, isMobile ? h / 2 : h),
+    isMobile ? 0.3 : 0.55,   // strength
+    isMobile ? 0.3 : 0.5,    // radius
+    isMobile ? 0.9 : 0.82,   // threshold — higher on mobile = fewer pixels caught
   );
   composer.addPass(bloomPass);
 

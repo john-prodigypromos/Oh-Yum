@@ -11,6 +11,8 @@ import type { ShipInput } from '../../systems/PhysicsSystem3D';
 
 let enemyIndex = 0;
 
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
 type Phase = 'cruise' | 'closing' | 'dogfight' | 'breakaway';
 
 export class RustyBehavior3D implements AIBehavior3D {
@@ -20,6 +22,15 @@ export class RustyBehavior3D implements AIBehavior3D {
   private phaseTimer = 0;
   private idx: number;
   private orbitAngle = 0;
+
+  // Pre-allocated temp objects to avoid per-frame GC pressure
+  private _desiredPos = new THREE.Vector3();
+  private _tmpRight = new THREE.Vector3();
+  private _tmpBias = new THREE.Vector3();
+  private _tmpDir = new THREE.Vector3();
+  private _tmpCurveRight = new THREE.Vector3();
+  private _lookMat = new THREE.Matrix4();
+  private _lookQuat = new THREE.Quaternion();
 
   constructor(
     _aimAccuracy: number = AI.RUSTY_AIM_ACCURACY,
@@ -62,14 +73,14 @@ export class RustyBehavior3D implements AIBehavior3D {
       this.phaseTimer = 0;
     }
 
-    const desiredPos = new THREE.Vector3();
+    const desiredPos = this._desiredPos;
 
     switch (this.phase) {
       case 'cruise': {
         // Fly ahead of the player — clearly visible in their forward view
         // Orbits in the player's forward hemisphere so they can always see the enemy
         const playerFwd = target.getForward();
-        const playerRight = new THREE.Vector3(-playerFwd.z, 0, playerFwd.x);
+        this._tmpRight.set(-playerFwd.z, 0, playerFwd.x);
         const orbitRadius = 200 + this.idx * 40;
         const lateralSwing = Math.sin(this.orbitAngle) * orbitRadius * 0.6;
         const verticalWave = Math.sin(this.timer * 0.4 + this.idx) * 30;
@@ -77,7 +88,7 @@ export class RustyBehavior3D implements AIBehavior3D {
         // Position ahead of player + lateral swing
         desiredPos.copy(target.position);
         desiredPos.addScaledVector(playerFwd, orbitRadius); // always in front
-        desiredPos.addScaledVector(playerRight, lateralSwing);
+        desiredPos.addScaledVector(this._tmpRight, lateralSwing);
         desiredPos.y += verticalWave;
         break;
       }
@@ -85,7 +96,7 @@ export class RustyBehavior3D implements AIBehavior3D {
       case 'closing': {
         // Gradually close distance while staying in the player's forward view
         const playerFwd = target.getForward();
-        const playerRight = new THREE.Vector3(-playerFwd.z, 0, playerFwd.x);
+        this._tmpRight.set(-playerFwd.z, 0, playerFwd.x);
         const closingProgress = Math.min(1, this.phaseTimer / 8);
         const forwardDist = 200 * (1 - closingProgress * 0.7); // 200 → 60
         const weaveSpeed = 1.5 + this.idx * 0.3;
@@ -95,7 +106,7 @@ export class RustyBehavior3D implements AIBehavior3D {
         // Stay ahead but get closer
         desiredPos.copy(target.position);
         desiredPos.addScaledVector(playerFwd, forwardDist);
-        desiredPos.addScaledVector(playerRight, lateralWeave);
+        desiredPos.addScaledVector(this._tmpRight, lateralWeave);
         desiredPos.y += verticalWeave;
         break;
       }
@@ -107,32 +118,32 @@ export class RustyBehavior3D implements AIBehavior3D {
         const combatRadius = 40 + Math.sin(this.timer * 0.8) * 25; // 15-65 range — tighter
 
         // Orbit with bias toward getting behind the player
-        const behindBias = playerFwd.clone().multiplyScalar(-40);
-        const weaveRight = new THREE.Vector3(-playerFwd.z, 0, playerFwd.x);
+        this._tmpBias.copy(playerFwd).multiplyScalar(-40);
+        this._tmpRight.set(-playerFwd.z, 0, playerFwd.x);
         const orbitOffset = Math.sin(this.orbitAngle * 1.5) * combatRadius;
         const verticalBias = Math.cos(this.idx * 1.7 + this.timer * 0.6) * 25;
 
         desiredPos.set(
-          target.position.x + behindBias.x + weaveRight.x * orbitOffset,
+          target.position.x + this._tmpBias.x + this._tmpRight.x * orbitOffset,
           target.position.y + verticalBias,
-          target.position.z + behindBias.z + weaveRight.z * orbitOffset,
+          target.position.z + this._tmpBias.z + this._tmpRight.z * orbitOffset,
         );
         break;
       }
 
       case 'breakaway': {
         // Fly away from the player to reset — pull out to visible range
-        const awayDir = self.position.clone().sub(target.position);
-        if (awayDir.length() < 0.1) awayDir.set(1, 0, 0);
-        awayDir.normalize();
+        this._tmpDir.copy(self.position).sub(target.position);
+        if (this._tmpDir.length() < 0.1) this._tmpDir.set(1, 0, 0);
+        this._tmpDir.normalize();
 
         // Fly outward with a slight curve
-        const curveRight = new THREE.Vector3(-awayDir.z, 0, awayDir.x);
+        this._tmpCurveRight.set(-this._tmpDir.z, 0, this._tmpDir.x);
         const curve = Math.sin(this.timer * 2) * 50;
 
         desiredPos.copy(self.position);
-        desiredPos.addScaledVector(awayDir, 120);
-        desiredPos.addScaledVector(curveRight, curve);
+        desiredPos.addScaledVector(this._tmpDir, 120);
+        desiredPos.addScaledVector(this._tmpCurveRight, curve);
         desiredPos.y += Math.sin(this.timer * 1.5) * 20;
         break;
       }
@@ -148,10 +159,9 @@ export class RustyBehavior3D implements AIBehavior3D {
 
     // Face the player (or face direction of travel during breakaway)
     const lookTarget = this.phase === 'breakaway' ? desiredPos : target.position;
-    const lookMat = new THREE.Matrix4();
-    lookMat.lookAt(self.position, lookTarget, new THREE.Vector3(0, 1, 0));
-    const lookQuat = new THREE.Quaternion().setFromRotationMatrix(lookMat);
-    self.group.quaternion.slerp(lookQuat, Math.min(1, dt * 4));
+    this._lookMat.lookAt(self.position, lookTarget, WORLD_UP);
+    this._lookQuat.setFromRotationMatrix(this._lookMat);
+    self.group.quaternion.slerp(this._lookQuat, Math.min(1, dt * 4));
 
     // Fire during closing and dogfight phases, at longer range
     let fire = false;

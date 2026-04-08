@@ -28,6 +28,31 @@ import { ParticleSystem3D } from '../systems/ParticleSystem3D';
 import { createLevelEnvironment, type LevelEnvironment } from '../systems/EnvironmentLoader';
 import { getSpawnTaunt } from '../config/VillainTaunts';
 
+// Pre-allocated vectors for hot-path calculations (avoid GC pressure)
+const _projTmp = new THREE.Vector3();
+
+// DOM overlay pool for damage effects — prevents DOM flooding
+const MAX_OVERLAYS = 8;
+const _overlayPool: HTMLDivElement[] = [];
+let _overlayIdx = 0;
+function getDamageOverlay(): HTMLDivElement {
+  if (_overlayPool.length < MAX_OVERLAYS) {
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;display:none;';
+    document.getElementById('ui-overlay')?.appendChild(el);
+    _overlayPool.push(el);
+  }
+  // Round-robin reuse — oldest overlay gets recycled
+  const el = _overlayPool[_overlayIdx % MAX_OVERLAYS];
+  _overlayIdx++;
+  el.style.display = 'block';
+  el.style.opacity = '1';
+  return el;
+}
+function releaseDamageOverlay(el: HTMLDivElement, delayMs: number): void {
+  setTimeout(() => { el.style.display = 'none'; }, delayMs);
+}
+
 export interface ArenaState {
   player: Ship3D;
   enemies: Ship3D[];
@@ -266,8 +291,8 @@ export function updateArena(
   const visibleIndices: number[] = [];
   for (let i = 0; i < enemies.length; i++) {
     if (!enemies[i].alive) continue;
-    const proj = enemies[i].position.clone().project(cam);
-    if (proj.z < 1 && proj.x > -1.2 && proj.x < 1.2 && proj.y > -1.2 && proj.y < 1.2) {
+    _projTmp.copy(enemies[i].position).project(cam);
+    if (_projTmp.z < 1 && _projTmp.x > -1.2 && _projTmp.x < 1.2 && _projTmp.y > -1.2 && _projTmp.y < 1.2) {
       visibleIndices.push(i);
     }
   }
@@ -342,82 +367,42 @@ export function updateArena(
         if (isShield) state.sound.shieldHit();
         else state.sound.hullHit();
 
-        const overlay = document.getElementById('ui-overlay')!;
-
-        // Full-screen damage flash — amber for hull, blue for shield
-        const flash = document.createElement('div');
+        // Full-screen damage flash — pooled overlay (no DOM creation)
+        const flash = getDamageOverlay();
         const color = isShield
-          ? 'rgba(0, 150, 255, 0.6)'          // bright blue for shield
-          : 'rgba(255, 160, 20, 0.75)';        // intense amber for hull
-        flash.style.cssText = `
-          position:fixed;top:0;left:0;width:100%;height:100%;
-          background:${color};z-index:40;pointer-events:none;
-          transition:opacity 1.0s ease-out;
-        `;
-        overlay.appendChild(flash);
+          ? 'rgba(0, 150, 255, 0.6)'
+          : 'rgba(255, 160, 20, 0.75)';
+        flash.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;background:${color};z-index:40;pointer-events:none;display:block;transition:opacity 1.0s ease-out;`;
         requestAnimationFrame(() => { flash.style.opacity = '0'; });
-        setTimeout(() => flash.remove(), 1100);
+        releaseDamageOverlay(flash, 1100);
 
-        // Amber vignette — heavy glowing edges that persist on hull hits
+        // Vignette or shimmer — single pooled overlay
         if (!isShield) {
-          const vignette = document.createElement('div');
-          vignette.style.cssText = `
-            position:fixed;top:0;left:0;width:100%;height:100%;
-            z-index:39;pointer-events:none;
-            background:radial-gradient(ellipse at center, transparent 20%, rgba(255,140,0,0.55) 70%, rgba(200,60,0,0.7) 100%);
-            transition:opacity 1.8s ease-out;
-          `;
-          overlay.appendChild(vignette);
+          const vignette = getDamageOverlay();
+          vignette.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;z-index:39;pointer-events:none;display:block;background:radial-gradient(ellipse at center, transparent 20%, rgba(255,140,0,0.55) 70%, rgba(200,60,0,0.7) 100%);transition:opacity 1.8s ease-out;`;
           requestAnimationFrame(() => { vignette.style.opacity = '0'; });
-          setTimeout(() => vignette.remove(), 2000);
-        }
-
-        // Shield shimmer effect — thick blue border + strong glow
-        if (isShield) {
-          const shimmer = document.createElement('div');
-          shimmer.style.cssText = `
-            position:fixed;top:0;left:0;width:100%;height:100%;
-            z-index:39;pointer-events:none;
-            border:12px solid rgba(0,180,255,0.8);
-            box-shadow:inset 0 0 120px rgba(0,150,255,0.4), inset 0 0 200px rgba(0,100,255,0.2);
-            transition:opacity 0.6s ease-out;
-          `;
-          overlay.appendChild(shimmer);
+          releaseDamageOverlay(vignette, 2000);
+        } else {
+          const shimmer = getDamageOverlay();
+          shimmer.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;z-index:39;pointer-events:none;display:block;border:12px solid rgba(0,180,255,0.8);box-shadow:inset 0 0 120px rgba(0,150,255,0.4), inset 0 0 200px rgba(0,100,255,0.2);transition:opacity 0.6s ease-out;`;
           requestAnimationFrame(() => { shimmer.style.opacity = '0'; });
-          setTimeout(() => shimmer.remove(), 700);
+          releaseDamageOverlay(shimmer, 700);
         }
 
-        // Multiple directional hit streaks — 2-3 bright lines across screen
-        const streakCount = isShield ? 1 : 2 + Math.floor(Math.random() * 2);
-        for (let s = 0; s < streakCount; s++) {
-          const streak = document.createElement('div');
-          const sAngle = Math.random() * 360;
-          const thickness = 2 + Math.random() * 4;
-          streak.style.cssText = `
-            position:fixed;top:50%;left:50%;width:200vw;height:${thickness}px;
-            transform:translate(-50%,-50%) rotate(${sAngle}deg);
-            background:linear-gradient(90deg, transparent 20%, ${isShield ? 'rgba(0,200,255,0.8)' : 'rgba(255,80,0,0.9)'} 50%, transparent 80%);
-            z-index:41;pointer-events:none;
-            transition:opacity 0.5s ease-out;
-          `;
-          overlay.appendChild(streak);
-          setTimeout(() => { streak.style.opacity = '0'; }, s * 50);
-          setTimeout(() => streak.remove(), 600 + s * 50);
-        }
+        // Single directional hit streak — pooled
+        const streak = getDamageOverlay();
+        const sAngle = Math.random() * 360;
+        const sColor = isShield ? 'rgba(0,200,255,0.8)' : 'rgba(255,80,0,0.9)';
+        streak.style.cssText = `position:fixed;top:50%;left:50%;width:200vw;height:3px;display:block;transform:translate(-50%,-50%) rotate(${sAngle}deg);background:linear-gradient(90deg, transparent 20%, ${sColor} 50%, transparent 80%);z-index:41;pointer-events:none;transition:opacity 0.5s ease-out;`;
+        requestAnimationFrame(() => { streak.style.opacity = '0'; });
+        releaseDamageOverlay(streak, 600);
 
-        // Critical damage warning — persistent red pulse when hull is low
+        // Critical damage warning — pooled
         if (player.damagePct > 0.5) {
-          const warning = document.createElement('div');
-          warning.style.cssText = `
-            position:fixed;top:0;left:0;width:100%;height:100%;
-            z-index:38;pointer-events:none;
-            background:radial-gradient(ellipse at center, transparent 20%, rgba(200,0,0,0.25) 100%);
-            animation:critPulse 0.5s ease-in-out;
-          `;
-          overlay.appendChild(warning);
-          setTimeout(() => warning.remove(), 500);
+          const warning = getDamageOverlay();
+          warning.style.cssText = `position:fixed;top:0;left:0;width:100%;height:100%;z-index:38;pointer-events:none;display:block;background:radial-gradient(ellipse at center, transparent 20%, rgba(200,0,0,0.25) 100%);animation:critPulse 0.5s ease-in-out;`;
+          releaseDamageOverlay(warning, 500);
 
-          // Inject animation if not already present
           if (!document.getElementById('crit-pulse-css')) {
             const style = document.createElement('style');
             style.id = 'crit-pulse-css';

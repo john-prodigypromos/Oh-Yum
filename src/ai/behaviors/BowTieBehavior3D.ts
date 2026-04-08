@@ -7,6 +7,8 @@ import { Ship3D } from '../../entities/Ship3D';
 import type { AIBehavior3D } from '../AIBehavior3D';
 import type { ShipInput } from '../../systems/PhysicsSystem3D';
 
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
 type Phase = 'hidden' | 'approach' | 'attack' | 'retreat';
 
 export class BowTieBehavior3D implements AIBehavior3D {
@@ -19,6 +21,13 @@ export class BowTieBehavior3D implements AIBehavior3D {
 
   // Fog visibility range — enemies beyond this are "hidden"
   private readonly FOG_RANGE = 180;
+
+  // Pre-allocated temp objects to avoid per-frame GC pressure
+  private _desiredPos = new THREE.Vector3();
+  private _tmpRight = new THREE.Vector3();
+  private _tmpDir = new THREE.Vector3();
+  private _lookMat = new THREE.Matrix4();
+  private _lookQuat = new THREE.Quaternion();
 
   constructor(
     _aimAccuracy: number,
@@ -38,7 +47,7 @@ export class BowTieBehavior3D implements AIBehavior3D {
     this.phaseTimer += dt;
 
     const distToPlayer = self.position.distanceTo(target.position);
-    const desiredPos = new THREE.Vector3();
+    const desiredPos = this._desiredPos;
 
     // ── Phase transitions ──
     switch (this.phase) {
@@ -97,23 +106,23 @@ export class BowTieBehavior3D implements AIBehavior3D {
 
       case 'approach': {
         // Dive toward player at 1.2x speed
-        const toPlayer = target.position.clone().sub(self.position).normalize();
-        desiredPos.copy(self.position).addScaledVector(toPlayer, 120 * dt);
+        this._tmpDir.copy(target.position).sub(self.position).normalize();
+        desiredPos.copy(self.position).addScaledVector(this._tmpDir, 120 * dt);
         break;
       }
 
       case 'attack': {
         // Tight orbit around player — close range, aggressive
         const playerFwd = target.getForward();
-        const playerRight = new THREE.Vector3(-playerFwd.z, 0, playerFwd.x);
+        this._tmpRight.set(-playerFwd.z, 0, playerFwd.x);
         const combatRadius = 40 + Math.sin(this.timer * 1.5) * 15;
         const orbitOffset = Math.sin(this.timer * 2) * combatRadius;
         const verticalBob = Math.cos(this.timer * 1.2) * 15;
 
         desiredPos.set(
-          target.position.x + playerRight.x * orbitOffset,
+          target.position.x + this._tmpRight.x * orbitOffset,
           target.position.y + verticalBob,
-          target.position.z + playerRight.z * orbitOffset,
+          target.position.z + this._tmpRight.z * orbitOffset,
         );
         break;
       }
@@ -121,8 +130,8 @@ export class BowTieBehavior3D implements AIBehavior3D {
       case 'retreat': {
         // Flee to retreat target
         desiredPos.copy(self.position);
-        const toRetreat = this.retreatTarget.clone().sub(self.position).normalize();
-        desiredPos.addScaledVector(toRetreat, 140 * dt);
+        this._tmpDir.copy(this.retreatTarget).sub(self.position).normalize();
+        desiredPos.addScaledVector(this._tmpDir, 140 * dt);
         break;
       }
     }
@@ -135,10 +144,9 @@ export class BowTieBehavior3D implements AIBehavior3D {
 
     // Face direction of travel during retreat, face player otherwise
     const lookTarget = this.phase === 'retreat' ? desiredPos : target.position;
-    const lookMat = new THREE.Matrix4();
-    lookMat.lookAt(self.position, lookTarget, new THREE.Vector3(0, 1, 0));
-    const lookQuat = new THREE.Quaternion().setFromRotationMatrix(lookMat);
-    self.group.quaternion.slerp(lookQuat, Math.min(1, dt * 5));
+    this._lookMat.lookAt(self.position, lookTarget, WORLD_UP);
+    this._lookQuat.setFromRotationMatrix(this._lookMat);
+    self.group.quaternion.slerp(this._lookQuat, Math.min(1, dt * 5));
 
     // Fire only during attack phase — aggressive burst
     let fire = false;

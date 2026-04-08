@@ -7,6 +7,8 @@ import { Ship3D } from '../../entities/Ship3D';
 import type { AIBehavior3D } from '../AIBehavior3D';
 import type { ShipInput } from '../../systems/PhysicsSystem3D';
 
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
 type Phase = 'dogfight' | 'charge_telegraph' | 'charging' | 'charge_cooldown' | 'breakaway';
 
 export class BoloTieBehavior3D implements AIBehavior3D {
@@ -17,6 +19,16 @@ export class BoloTieBehavior3D implements AIBehavior3D {
   private orbitAngle = 0;
   private chargeDir = new THREE.Vector3();
   private chargeCooldown = 5;
+
+  // Pre-allocated temp objects to avoid per-frame GC pressure
+  private _desiredPos = new THREE.Vector3();
+  private _tmpRight = new THREE.Vector3();
+  private _tmpBias = new THREE.Vector3();
+  private _tmpDir = new THREE.Vector3();
+  private _tmpCurveRight = new THREE.Vector3();
+  private _tmpLookTarget = new THREE.Vector3();
+  private _lookMat = new THREE.Matrix4();
+  private _lookQuat = new THREE.Quaternion();
 
   constructor(
     _aimAccuracy: number,
@@ -40,7 +52,7 @@ export class BoloTieBehavior3D implements AIBehavior3D {
     this.orbitAngle += dt * 0.25; // wide, slow orbit
 
     const distToPlayer = self.position.distanceTo(target.position);
-    const desiredPos = new THREE.Vector3();
+    const desiredPos = this._desiredPos;
     this.isCharging = false;
 
     // ── Phase transitions ──
@@ -84,15 +96,15 @@ export class BoloTieBehavior3D implements AIBehavior3D {
       case 'dogfight': {
         // Standard orbit — wide turns (0.4x rotation feel via slow orbit)
         const playerFwd = target.getForward();
-        const playerRight = new THREE.Vector3(-playerFwd.z, 0, playerFwd.x);
-        const behindBias = playerFwd.clone().multiplyScalar(-30);
+        this._tmpRight.set(-playerFwd.z, 0, playerFwd.x);
+        this._tmpBias.copy(playerFwd).multiplyScalar(-30);
         const orbitOffset = Math.sin(this.orbitAngle) * 80;
         const verticalBob = Math.cos(this.timer * 0.4) * 20;
 
         desiredPos.set(
-          target.position.x + behindBias.x + playerRight.x * orbitOffset,
+          target.position.x + this._tmpBias.x + this._tmpRight.x * orbitOffset,
           target.position.y + verticalBob,
-          target.position.z + behindBias.z + playerRight.z * orbitOffset,
+          target.position.z + this._tmpBias.z + this._tmpRight.z * orbitOffset,
         );
         break;
       }
@@ -112,11 +124,10 @@ export class BoloTieBehavior3D implements AIBehavior3D {
         self.position.addScaledVector(this.chargeDir, 160 * dt);
 
         // Face charge direction
-        const lookMat = new THREE.Matrix4();
-        const lookTarget = self.position.clone().add(this.chargeDir);
-        lookMat.lookAt(self.position, lookTarget, new THREE.Vector3(0, 1, 0));
-        const lookQuat = new THREE.Quaternion().setFromRotationMatrix(lookMat);
-        self.group.quaternion.slerp(lookQuat, Math.min(1, dt * 8));
+        this._tmpLookTarget.copy(self.position).add(this.chargeDir);
+        this._lookMat.lookAt(self.position, this._tmpLookTarget, WORLD_UP);
+        this._lookQuat.setFromRotationMatrix(this._lookMat);
+        self.group.quaternion.slerp(this._lookQuat, Math.min(1, dt * 8));
 
         return { yaw: 0, pitch: 0, roll: 0, thrust: 0, fire: false };
       }
@@ -129,11 +140,11 @@ export class BoloTieBehavior3D implements AIBehavior3D {
       }
 
       case 'breakaway': {
-        const awayDir = self.position.clone().sub(target.position).normalize();
-        const curveRight = new THREE.Vector3(-awayDir.z, 0, awayDir.x);
+        this._tmpDir.copy(self.position).sub(target.position).normalize();
+        this._tmpCurveRight.set(-this._tmpDir.z, 0, this._tmpDir.x);
         desiredPos.copy(self.position);
-        desiredPos.addScaledVector(awayDir, 100);
-        desiredPos.addScaledVector(curveRight, Math.sin(this.timer * 1.5) * 40);
+        desiredPos.addScaledVector(this._tmpDir, 100);
+        desiredPos.addScaledVector(this._tmpCurveRight, Math.sin(this.timer * 1.5) * 40);
         break;
       }
     }
@@ -145,10 +156,9 @@ export class BoloTieBehavior3D implements AIBehavior3D {
     self.position.z += (desiredPos.z - self.position.z) * lerpRate;
 
     // Face the player
-    const lookMat = new THREE.Matrix4();
-    lookMat.lookAt(self.position, target.position, new THREE.Vector3(0, 1, 0));
-    const lookQuat = new THREE.Quaternion().setFromRotationMatrix(lookMat);
-    self.group.quaternion.slerp(lookQuat, Math.min(1, dt * 3));
+    this._lookMat.lookAt(self.position, target.position, WORLD_UP);
+    this._lookQuat.setFromRotationMatrix(this._lookMat);
+    self.group.quaternion.slerp(this._lookQuat, Math.min(1, dt * 3));
 
     // Fire during dogfight and charge_cooldown
     let fire = false;

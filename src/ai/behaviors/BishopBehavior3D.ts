@@ -10,6 +10,8 @@ import type { AIBehavior3D } from '../AIBehavior3D';
 import type { ShipInput } from '../../systems/PhysicsSystem3D';
 import { BLACK_HOLE_POS } from '../../systems/EnvironmentLoader';
 
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
+
 type BossPhase = 'phase1' | 'phase2' | 'phase3';
 type SubPhase = 'dogfight' | 'breakaway' | 'evasive' | 'charge';
 
@@ -28,6 +30,19 @@ export class BishopBehavior3D implements AIBehavior3D {
 
   // Black hole position — imported from EnvironmentLoader
   private readonly BH_POS = BLACK_HOLE_POS;
+
+  // Pre-allocated temp objects to avoid per-frame GC pressure
+  private _desiredPos = new THREE.Vector3();
+  private _tmpRight = new THREE.Vector3();
+  private _tmpBias = new THREE.Vector3();
+  private _tmpDir = new THREE.Vector3();
+  private _tmpCurveRight = new THREE.Vector3();
+  private _tmpToPlayer = new THREE.Vector3();
+  private _tmpToBH = new THREE.Vector3();
+  private _tmpChargeDir = new THREE.Vector3();
+  private _tmpLookTarget = new THREE.Vector3();
+  private _lookMat = new THREE.Matrix4();
+  private _lookQuat = new THREE.Quaternion();
 
   constructor(
     _aimAccuracy: number,
@@ -48,7 +63,7 @@ export class BishopBehavior3D implements AIBehavior3D {
 
     const hpPct = self.hull / self.maxHull;
     const distToPlayer = self.position.distanceTo(target.position);
-    const desiredPos = new THREE.Vector3();
+    const desiredPos = this._desiredPos;
 
     // ── Boss phase transitions based on HP ──
     if (hpPct <= 0.2 && this.bossPhase !== 'phase3') {
@@ -108,32 +123,32 @@ export class BishopBehavior3D implements AIBehavior3D {
     switch (this.subPhase) {
       case 'dogfight': {
         const playerFwd = target.getForward();
-        const playerRight = new THREE.Vector3(-playerFwd.z, 0, playerFwd.x);
+        this._tmpRight.set(-playerFwd.z, 0, playerFwd.x);
         const combatRadius = this.bossPhase === 'phase1'
           ? 50 + Math.sin(this.timer * 0.8) * 20  // tighter in phase 1
           : 35 + Math.sin(this.timer * 1.0) * 15;  // even tighter in phase 3
 
-        const behindBias = playerFwd.clone().multiplyScalar(-35);
+        this._tmpBias.copy(playerFwd).multiplyScalar(-35);
         const orbitOffset = Math.sin(this.orbitAngle * 1.5) * combatRadius;
         const verticalBias = Math.cos(this.timer * 0.7) * 20;
 
         desiredPos.set(
-          target.position.x + behindBias.x + playerRight.x * orbitOffset,
+          target.position.x + this._tmpBias.x + this._tmpRight.x * orbitOffset,
           target.position.y + verticalBias,
-          target.position.z + behindBias.z + playerRight.z * orbitOffset,
+          target.position.z + this._tmpBias.z + this._tmpRight.z * orbitOffset,
         );
         break;
       }
 
       case 'breakaway': {
-        const awayDir = self.position.clone().sub(target.position);
-        if (awayDir.length() < 0.1) awayDir.set(1, 0, 0);
-        awayDir.normalize();
-        const curveRight = new THREE.Vector3(-awayDir.z, 0, awayDir.x);
+        this._tmpDir.copy(self.position).sub(target.position);
+        if (this._tmpDir.length() < 0.1) this._tmpDir.set(1, 0, 0);
+        this._tmpDir.normalize();
+        this._tmpCurveRight.set(-this._tmpDir.z, 0, this._tmpDir.x);
 
         desiredPos.copy(self.position);
-        desiredPos.addScaledVector(awayDir, 120);
-        desiredPos.addScaledVector(curveRight, Math.sin(this.timer * 2) * 50);
+        desiredPos.addScaledVector(this._tmpDir, 120);
+        desiredPos.addScaledVector(this._tmpCurveRight, Math.sin(this.timer * 2) * 50);
         desiredPos.y += Math.sin(this.timer * 1.5) * 20;
         break;
       }
@@ -141,37 +156,36 @@ export class BishopBehavior3D implements AIBehavior3D {
       case 'evasive': {
         // Phase 2: Stay at medium range, dodge erratically, let drones do the work
         const playerFwd = target.getForward();
-        const playerRight = new THREE.Vector3(-playerFwd.z, 0, playerFwd.x);
+        this._tmpRight.set(-playerFwd.z, 0, playerFwd.x);
         const evasiveRadius = 120 + Math.sin(this.timer * 1.5) * 40;
         const lateralDodge = Math.sin(this.timer * 3) * 60;
         const verticalDodge = Math.cos(this.timer * 2.5) * 35;
 
         desiredPos.copy(target.position);
         desiredPos.addScaledVector(playerFwd, evasiveRadius * 0.5);
-        desiredPos.addScaledVector(playerRight, lateralDodge);
+        desiredPos.addScaledVector(this._tmpRight, lateralDodge);
         desiredPos.y += verticalDodge;
         break;
       }
 
       case 'charge': {
         // Phase 3: Aggressive charge toward player, pulling closer to black hole
-        const toPlayer = target.position.clone().sub(self.position).normalize();
+        this._tmpToPlayer.copy(target.position).sub(self.position).normalize();
 
         // Bias slightly toward the black hole — high risk/reward
-        const toBH = this.BH_POS.clone().sub(self.position).normalize();
-        const chargeDir = toPlayer.clone().addScaledVector(toBH, 0.3).normalize();
+        this._tmpToBH.copy(this.BH_POS).sub(self.position).normalize();
+        this._tmpChargeDir.copy(this._tmpToPlayer).addScaledVector(this._tmpToBH, 0.3).normalize();
 
-        desiredPos.copy(self.position).addScaledVector(chargeDir, 140 * dt);
+        desiredPos.copy(self.position).addScaledVector(this._tmpChargeDir, 140 * dt);
 
         // Direct position for charge feel
-        self.position.addScaledVector(chargeDir, 100 * dt);
+        self.position.addScaledVector(this._tmpChargeDir, 100 * dt);
 
         // Face charge direction
-        const lookMat = new THREE.Matrix4();
-        const lookTarget = self.position.clone().add(chargeDir);
-        lookMat.lookAt(self.position, lookTarget, new THREE.Vector3(0, 1, 0));
-        const lookQuat = new THREE.Quaternion().setFromRotationMatrix(lookMat);
-        self.group.quaternion.slerp(lookQuat, Math.min(1, dt * 6));
+        this._tmpLookTarget.copy(self.position).add(this._tmpChargeDir);
+        this._lookMat.lookAt(self.position, this._tmpLookTarget, WORLD_UP);
+        this._lookQuat.setFromRotationMatrix(this._lookMat);
+        self.group.quaternion.slerp(this._lookQuat, Math.min(1, dt * 6));
 
         // Fire during charge
         const fire = distToPlayer < 250 && now - self.lastFireTime >= this.fireRate * 0.5;
@@ -188,10 +202,9 @@ export class BishopBehavior3D implements AIBehavior3D {
     self.position.z += (desiredPos.z - self.position.z) * lerpRate;
 
     // Face the player
-    const lookMat = new THREE.Matrix4();
-    lookMat.lookAt(self.position, target.position, new THREE.Vector3(0, 1, 0));
-    const lookQuat = new THREE.Quaternion().setFromRotationMatrix(lookMat);
-    self.group.quaternion.slerp(lookQuat, Math.min(1, dt * 4));
+    this._lookMat.lookAt(self.position, target.position, WORLD_UP);
+    this._lookQuat.setFromRotationMatrix(this._lookMat);
+    self.group.quaternion.slerp(this._lookQuat, Math.min(1, dt * 4));
 
     // Fire — more aggressive in later phases
     let fire = false;

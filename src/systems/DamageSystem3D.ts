@@ -18,9 +18,10 @@ export function processBoltDamage(
   hitboxRadius = SHIP.HITBOX_RADIUS,
 ): DamageEvent[] {
   const events: DamageEvent[] = [];
-  const activeBolts = boltPool.getActive();
+  const allBolts = boltPool.getActive();
 
-  for (const bolt of activeBolts) {
+  for (const bolt of allBolts) {
+    if (!bolt.active) continue;
     for (const ship of ships) {
       if (!ship.alive) continue;
       if (bolt.isPlayer === ship.isPlayer) continue;
