@@ -40,7 +40,9 @@ function createPhotoSkybox(scene: THREE.Scene): THREE.Group {
 }
 
 export function createStarfield(scene: THREE.Scene): THREE.Points {
-  const COUNT = 6000;
+  // Fewer, dimmer stars on mobile to reduce brightness/clutter
+  const isMobile = 'ontouchstart' in window || window.innerWidth < 600;
+  const COUNT = isMobile ? 2500 : 6000;
   const SPREAD = 5000;
   const rng = seededRng(42);
 
@@ -104,11 +106,11 @@ export function createStarfield(scene: THREE.Scene): THREE.Points {
   geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
   const mat = new THREE.PointsMaterial({
-    size: 2,
+    size: isMobile ? 1.5 : 2,
     sizeAttenuation: false,
     vertexColors: true,
     transparent: true,
-    opacity: 0.85,
+    opacity: isMobile ? 0.6 : 0.85,
     depthWrite: false,
   });
 

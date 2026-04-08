@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Ship Viewer — 360°</title>
+  <style>
+    * { margin: 0; padding: 0; }
+    body { background: #000; overflow: hidden; font-family: 'Rajdhani', sans-serif; }
+    canvas { display: block; }
+    #controls {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 16px; z-index: 10;
+    }
+    button {
+      background: rgba(10,20,30,0.8); color: #88aacc; border: 1px solid rgba(100,150,200,0.3);
+      padding: 8px 20px; font-family: 'Rajdhani', sans-serif; font-size: 14px;
+      letter-spacing: 2px; cursor: pointer; border-radius: 4px;
+    }
+    button:hover { background: rgba(20,40,60,0.9); border-color: rgba(100,150,200,0.6); }
+    button.active { border-color: #00bbff; color: #00bbff; }
+    #label {
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      color: #88aacc; font-size: 18px; letter-spacing: 4px; opacity: 0.6;
+    }
+    #hint {
+      position: fixed; top: 50px; left: 50%; transform: translateX(-50%);
+      color: #556677; font-size: 12px; letter-spacing: 2px;
+    }
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div id="label">ENEMY SHIP</div>
+  <div id="hint">DRAG TO ROTATE · SCROLL TO ZOOM</div>
+  <div id="controls">
+    <button id="btn-enemy" class="active">ENEMY</button>
+    <button id="btn-player">PLAYER</button>
+    <button id="btn-spin">PAUSE SPIN</button>
+  </div>
+  <script type="module" src="/src/ship-viewer-entry.ts"></script>
+</body>
+</html>

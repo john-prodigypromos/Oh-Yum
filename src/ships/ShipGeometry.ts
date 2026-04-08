@@ -5,16 +5,108 @@
 
 import * as THREE from 'three';
 
-/** Player fighter — high-detail sculpted hero ship.
- *  LatheGeometry fuselage, framed cockpit canopy, airfoil wings,
- *  twin canted tails, full engine detail, nav lights. */
+/** Player fighter — same silhouette as enemy, different material names
+ *  so the player material system colors it differently (blue/cyan). */
 export function createPlayerShipGeometry(): THREE.Group {
-  const group = new THREE.Group();
+  // Use the same geometry as enemy but with player material naming
+  const group = createEnemyShipGeometry();
 
-  // ═══════════════════════════════════════════════════════════
-  // FUSELAGE — smooth LatheGeometry, sleeker than enemy
-  // ═══════════════════════════════════════════════════════════
-  const profile: [number, number][] = [
+  // Remap mesh names: enemy uses 'hull'/'engine'/'nozzle'/'accent'/'armor-dark'
+  // Player materials expect 'fuselage'/'engine-left'/'nozzle-left'
+  group.traverse((child) => {
+    if (!(child instanceof THREE.Mesh)) return;
+    const n = child.name;
+    if (n === 'hull') child.name = 'fuselage';
+    else if (n === 'engine') child.name = 'engine-left';
+    else if (n === 'nozzle') child.name = 'nozzle-left';
+    else if (n === 'armor-dark') child.name = 'cockpit';
+  });
+
+  // ── PLAYER ONLY: Enlarge canopy 28% and center it over more of the fuselage ──
+  // The canopy is the first 'cockpit' mesh with a sphere-like shape (position.z > 0)
+  let canopyFound = false;
+  group.traverse((child) => {
+    if (!canopyFound && child instanceof THREE.Mesh && child.name === 'cockpit' && child.position.z > 0.5) {
+      child.scale.setScalar(1.28);
+      child.position.set(0, 0.24, 0.4);
+      canopyFound = true;
+    }
+  });
+
+  // ── PLAYER ONLY: Enlarge wingspan by 16% ──
+  // Scale X position of wing-related meshes outward
+  group.traverse((child) => {
+    if (child instanceof THREE.Mesh || child instanceof THREE.PointLight) {
+      const absX = Math.abs(child.position.x);
+      if (absX > 1.0) {
+        // This is a wing, wingtip fin, or nav light — push outward 16%
+        child.position.x *= 1.16;
+      }
+    }
+  });
+
+  // ── PLAYER ONLY: Dorsal 3rd engine on top (matches twin engines) ──
+  const dY = 0.35;
+  // Engine housing
+  const dHousingGeo = new THREE.CylinderGeometry(0.32, 0.38, 1.8, 18);
+  dHousingGeo.rotateX(Math.PI / 2);
+  const dHousing = new THREE.Mesh(dHousingGeo);
+  dHousing.name = 'fuselage';
+  dHousing.position.set(0, dY, -1.8);
+  group.add(dHousing);
+
+  // Intake lip
+  const dLipGeo = new THREE.TorusGeometry(0.34, 0.03, 8, 18);
+  const dLip = new THREE.Mesh(dLipGeo);
+  dLip.name = 'fuselage';
+  dLip.position.set(0, dY, -0.9);
+  group.add(dLip);
+
+  // Fan face
+  const dFanGeo = new THREE.CircleGeometry(0.3, 16);
+  const dFan = new THREE.Mesh(dFanGeo);
+  dFan.name = 'cockpit';
+  dFan.position.set(0, dY, -0.89);
+  group.add(dFan);
+
+  // Engine core
+  const dCoreGeo = new THREE.CylinderGeometry(0.2, 0.28, 0.8, 14);
+  dCoreGeo.rotateX(Math.PI / 2);
+  const dCore = new THREE.Mesh(dCoreGeo);
+  dCore.name = 'engine-left';
+  dCore.position.set(0, dY, -2.5);
+  group.add(dCore);
+
+  // Exhaust cone
+  const dExGeo = new THREE.ConeGeometry(0.15, 0.4, 12);
+  dExGeo.rotateX(Math.PI / 2);
+  const dExhaust = new THREE.Mesh(dExGeo);
+  dExhaust.name = 'engine-left';
+  dExhaust.position.set(0, dY, -2.9);
+  group.add(dExhaust);
+
+  // Nozzle outer ring
+  const dNozGeo = new THREE.TorusGeometry(0.3, 0.03, 10, 18);
+  const dNoz = new THREE.Mesh(dNozGeo);
+  dNoz.name = 'fuselage';
+  dNoz.position.set(0, dY, -2.7);
+  group.add(dNoz);
+
+  // Nozzle glow — same as the twin engines
+  const dGlowGeo = new THREE.RingGeometry(0.08, 0.26, 16);
+  const dGlow = new THREE.Mesh(dGlowGeo);
+  dGlow.name = 'nozzle-left';
+  dGlow.position.set(0, dY, -2.75);
+  group.add(dGlow);
+
+  // Player ship is 13% larger than enemy
+  group.scale.setScalar(1.13);
+
+  return group;
+}
+
+/** DEAD CODE MARKER */
+const _dead = 0; /* [
     [0.00,  4.6],  // nose tip
     [0.05,  4.4],
     [0.14,  4.0],
@@ -406,22 +498,7 @@ export function createEnemyShipGeometry(): THREE.Group {
   fuselage.rotation.x = -Math.PI / 2;
   group.add(fuselage);
 
-  // ═══════════════════════════════════════════════════════════
-  // DORSAL SPINE — raised ridge along the top
-  // ═══════════════════════════════════════════════════════════
-  const spineShape = new THREE.Shape();
-  spineShape.moveTo(0, 0);
-  spineShape.lineTo(-0.08, 0);
-  spineShape.lineTo(-0.04, 0.18);
-  spineShape.lineTo(0.04, 0.18);
-  spineShape.lineTo(0.08, 0);
-  spineShape.lineTo(0, 0);
-  const spineGeo = new THREE.ExtrudeGeometry(spineShape, { depth: 4.0, bevelEnabled: false });
-  spineGeo.rotateX(-Math.PI / 2);
-  const spine = new THREE.Mesh(spineGeo);
-  spine.name = 'hull';
-  spine.position.set(0, 0.42, -1.5);
-  group.add(spine);
+
 
   // ═══════════════════════════════════════════════════════════
   // COCKPIT CANOPY — dome glass + frame rails
@@ -430,47 +507,10 @@ export function createEnemyShipGeometry(): THREE.Group {
   canopyGeo.scale(1.2, 1.0, 2.0);
   const canopy = new THREE.Mesh(canopyGeo);
   canopy.name = 'cockpit';
-  canopy.position.set(0, 0.38, 1.2);
+  canopy.position.set(0, 0.22, 1.2);
   group.add(canopy);
 
-  // Canopy frame — center rail
-  const frameGeo = new THREE.BoxGeometry(0.04, 0.08, 1.6);
-  const frameCtr = new THREE.Mesh(frameGeo);
-  frameCtr.name = 'hull';
-  frameCtr.position.set(0, 0.58, 1.2);
-  group.add(frameCtr);
-  // Canopy frame — side rails
-  for (const side of [-1, 1]) {
-    const sideRail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.05, 1.4));
-    sideRail.name = 'hull';
-    sideRail.position.set(side * 0.38, 0.5, 1.2);
-    group.add(sideRail);
-  }
-  // Canopy frame — cross braces
-  for (const zOff of [0.5, 1.2]) {
-    const brace = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.04, 0.03));
-    brace.name = 'hull';
-    brace.position.set(0, 0.54, zOff);
-    group.add(brace);
-  }
 
-  // ═══════════════════════════════════════════════════════════
-  // LERX — Leading Edge Root Extensions (wing-body blend)
-  // ═══════════════════════════════════════════════════════════
-  for (const side of [-1, 1]) {
-    const lerxShape = new THREE.Shape();
-    lerxShape.moveTo(0, 0);
-    lerxShape.lineTo(side * 1.0, -0.08);
-    lerxShape.lineTo(side * 0.6, -0.2);
-    lerxShape.lineTo(0, -0.1);
-    lerxShape.lineTo(0, 0);
-    const lerxGeo = new THREE.ExtrudeGeometry(lerxShape, { depth: 1.8, bevelEnabled: false });
-    lerxGeo.rotateX(-Math.PI / 2);
-    const lerx = new THREE.Mesh(lerxGeo);
-    lerx.name = 'hull';
-    lerx.position.set(0, 0.02, -0.2);
-    group.add(lerx);
-  }
 
   // ═══════════════════════════════════════════════════════════
   // WINGS — extruded airfoil, swept & tapered
@@ -501,131 +541,90 @@ export function createEnemyShipGeometry(): THREE.Group {
   leftWing.name = 'hull';
   leftWing.rotation.y = Math.PI / 2;
   leftWing.rotation.z = -0.02;
-  leftWing.position.set(-0.7, -0.06, -0.1);
+  leftWing.position.set(-0.4, -0.06, -0.1);
   group.add(leftWing);
 
   const rightWingGeo = wingGeo.clone();
   const rwPos = rightWingGeo.attributes.position;
   for (let i = 0; i < rwPos.count; i++) rwPos.setZ(i, -rwPos.getZ(i));
+  // Flip triangle winding after mirroring so normals point outward
+  const idx = rightWingGeo.index;
+  if (idx) {
+    const arr = idx.array;
+    for (let i = 0; i < arr.length; i += 3) {
+      const tmp = arr[i + 1];
+      arr[i + 1] = arr[i + 2];
+      arr[i + 2] = tmp;
+    }
+    idx.needsUpdate = true;
+  }
   rightWingGeo.computeVertexNormals();
   const rightWing = new THREE.Mesh(rightWingGeo);
   rightWing.name = 'hull';
   rightWing.rotation.y = Math.PI / 2;
   rightWing.rotation.z = 0.02;
-  rightWing.position.set(0.7, -0.06, -0.1);
+  rightWing.position.set(0.4, -0.06, -0.1);
   group.add(rightWing);
 
   // ═══════════════════════════════════════════════════════════
-  // WINGTIP FINS — angled outward
+  // WINGTIP FINS — grow from wing trailing edge, touching the wing
   // ═══════════════════════════════════════════════════════════
-  const finGeo = new THREE.BoxGeometry(0.06, 0.9, 1.0);
+  const finGeo = new THREE.BoxGeometry(0.08, 0.7, 0.8);
   const finPos = finGeo.attributes.position;
   for (let i = 0; i < finPos.count; i++) {
     const y = finPos.getY(i);
-    if (y > 0) finPos.setZ(i, finPos.getZ(i) * (1 - (y / 0.45) * 0.35));
+    // Taper toward top, widen at base to blend into wing
+    if (y > 0) {
+      finPos.setZ(i, finPos.getZ(i) * (1 - (y / 0.35) * 0.4));
+      finPos.setX(i, finPos.getX(i) * (1 - (y / 0.35) * 0.3));
+    }
   }
   finGeo.computeVertexNormals();
-  for (const [x, rz] of [[-5.0, -0.15], [5.0, 0.15]] as const) {
+  for (const [x, rz] of [[-4.0, -0.12], [4.0, 0.12]] as const) {
     const fin = new THREE.Mesh(finGeo.clone());
     fin.name = 'hull';
-    fin.position.set(x, 0.35, -0.8);
+    fin.position.set(x, 0.0, -0.4);
     fin.rotation.z = rz;
     group.add(fin);
   }
 
-  // ═══════════════════════════════════════════════════════════
-  // V-TAIL — twin canted stabilizers with airfoil section
-  // ═══════════════════════════════════════════════════════════
-  const stabProfile = new THREE.Shape();
-  stabProfile.moveTo(0, 0);
-  stabProfile.lineTo(-0.7, -0.02);
-  stabProfile.quadraticCurveTo(-0.75, 0.02, -0.7, 0.06);
-  stabProfile.lineTo(0, 0.03);
-  stabProfile.lineTo(0, 0);
-  const stabGeo = new THREE.ExtrudeGeometry(stabProfile, { depth: 1.4, bevelEnabled: false });
-  const stPos = stabGeo.attributes.position;
-  for (let i = 0; i < stPos.count; i++) {
-    const d = stPos.getZ(i);
-    const t = d / 1.4;
-    stPos.setX(i, stPos.getX(i) * (1 - t * 0.45));
-    stPos.setY(i, stPos.getY(i) * (1 - t * 0.45));
-  }
-  stabGeo.computeVertexNormals();
 
-  for (const side of [-1, 1]) {
-    const stab = new THREE.Mesh(stabGeo.clone());
-    stab.name = 'hull';
-    stab.rotation.z = side * -Math.PI / 2 + (side > 0 ? Math.PI : 0);
-    stab.rotation.x = side * 0.2;
-    stab.position.set(side * 0.6, 0.15, -2.4);
-    group.add(stab);
-  }
-
-  // Horizontal tail planes
-  const htGeo = new THREE.BoxGeometry(2.2, 0.06, 0.8);
-  const htPos = htGeo.attributes.position;
-  for (let i = 0; i < htPos.count; i++) {
-    const x = Math.abs(htPos.getX(i));
-    htPos.setY(i, htPos.getY(i) * (1 - (x / 1.1) * 0.6));
-  }
-  htGeo.computeVertexNormals();
-  for (const side of [-1, 1]) {
-    const ht = new THREE.Mesh(htGeo.clone());
-    ht.name = 'hull';
-    ht.position.set(side * 1.2, -0.02, -2.4);
-    group.add(ht);
-  }
 
   // ═══════════════════════════════════════════════════════════
-  // FORWARD INTAKES — smooth scoops with lips
+  // NOSE CONE — pointed tip extending from fuselage front
   // ═══════════════════════════════════════════════════════════
-  for (const side of [-1, 1]) {
-    // Intake body
-    const intGeo = new THREE.CylinderGeometry(0.22, 0.28, 1.0, 14);
-    intGeo.rotateX(-Math.PI / 2);
-    const intake = new THREE.Mesh(intGeo);
-    intake.name = 'hull';
-    intake.position.set(side * 0.55, -0.12, 2.3);
-    group.add(intake);
-    // Intake lip ring
-    const lipGeo = new THREE.TorusGeometry(0.24, 0.035, 8, 16);
-    const lip = new THREE.Mesh(lipGeo);
-    lip.name = 'hull';
-    lip.position.set(side * 0.55, -0.12, 2.82);
-    group.add(lip);
-    // Inner dark
-    const innerGeo = new THREE.CircleGeometry(0.2, 14);
-    const inner = new THREE.Mesh(innerGeo);
-    inner.name = 'armor-dark';
-    inner.position.set(side * 0.55, -0.12, 2.83);
-    group.add(inner);
+  const noseGeo = new THREE.ConeGeometry(0.35, 2.0, 16);
+  noseGeo.rotateX(Math.PI / 2);
+  // Flatten to match fuselage oval cross-section
+  const nosePos = noseGeo.attributes.position;
+  for (let i = 0; i < nosePos.count; i++) {
+    nosePos.setY(i, nosePos.getY(i) * 0.5);
   }
+  noseGeo.computeVertexNormals();
+  const nose = new THREE.Mesh(noseGeo);
+  nose.name = 'hull';
+  nose.position.set(0, -0.02, 3.6);
+  group.add(nose);
+
+
 
   // ═══════════════════════════════════════════════════════════
-  // CANNON BARRELS — twin guns with muzzle detail
+  // AFT CAP — close the open rear of the fuselage
   // ═══════════════════════════════════════════════════════════
-  for (const side of [-1, 1]) {
-    const barrelGeo = new THREE.CylinderGeometry(0.05, 0.05, 2.0, 12);
-    barrelGeo.rotateX(-Math.PI / 2);
-    const barrel = new THREE.Mesh(barrelGeo);
-    barrel.name = 'hull';
-    barrel.position.set(side * 0.28, -0.18, 3.8);
-    group.add(barrel);
-    // Muzzle ring
-    const muzzGeo = new THREE.TorusGeometry(0.065, 0.015, 6, 12);
-    const muzzle = new THREE.Mesh(muzzGeo);
-    muzzle.name = 'hull';
-    muzzle.position.set(side * 0.28, -0.18, 4.8);
-    group.add(muzzle);
+  // Cap is a circle in XY, needs to face aft (-Z direction)
+  // Fuselage is rotated -PI/2 on X, so in world space the aft end is at z=-2.8
+  // The fuselage cross-section at the aft is oval: width=0.48*2, height=0.48*0.5*2
+  const capGeo = new THREE.CircleGeometry(0.48, 28);
+  // Flatten to match fuselage oval (z was squished by 0.5)
+  const capPos = capGeo.attributes.position;
+  for (let i = 0; i < capPos.count; i++) {
+    capPos.setY(i, capPos.getY(i) * 0.5);
   }
-
-  // Nose sensor dome
-  const sensorGeo = new THREE.SphereGeometry(0.12, 10, 8);
-  sensorGeo.scale(1, 0.8, 1.5);
-  const sensor = new THREE.Mesh(sensorGeo);
-  sensor.name = 'armor-dark';
-  sensor.position.set(0, 0.15, 3.9);
-  group.add(sensor);
+  capGeo.computeVertexNormals();
+  const cap = new THREE.Mesh(capGeo);
+  cap.name = 'hull';
+  cap.position.set(0, 0, -2.8);
+  group.add(cap);
 
   // ═══════════════════════════════════════════════════════════
   // ENGINES — housings, intake lips, cores, petals, nozzles
@@ -701,165 +700,51 @@ export function createEnemyShipGeometry(): THREE.Group {
       group.add(petal);
     }
 
-    // Heat shroud plates
-    for (const offset of [-0.15, 0.15]) {
-      const shGeo = new THREE.BoxGeometry(0.06, 0.55, 1.0);
-      const shroud = new THREE.Mesh(shGeo);
-      shroud.name = 'hull';
-      shroud.position.set(sx + offset + side * 0.22, sy, -2.4);
-      group.add(shroud);
-    }
   }
 
-  // Engine connecting rear plate
-  const rearGeo = new THREE.BoxGeometry(1.6, 0.4, 0.25);
-  const rear = new THREE.Mesh(rearGeo);
-  rear.name = 'hull';
-  rear.position.set(0, -0.05, -1.7);
-  group.add(rear);
+
 
   // ═══════════════════════════════════════════════════════════
-  // VENTRAL DETAIL — keel, weapon bays, pylons, fins
+  // ACCENT LINES — red seams flush on body surface
   // ═══════════════════════════════════════════════════════════
-  // Ventral keel
-  const keelGeo = new THREE.BoxGeometry(0.05, 0.22, 3.2);
-  const kPos = keelGeo.attributes.position;
-  for (let i = 0; i < kPos.count; i++) {
-    const z = kPos.getZ(i);
-    const t = Math.abs(z) / 1.6;
-    if (t > 0.7) kPos.setY(i, kPos.getY(i) * (1 - (t - 0.7) * 2));
-  }
-  keelGeo.computeVertexNormals();
-  const keel = new THREE.Mesh(keelGeo);
-  keel.name = 'hull';
-  keel.position.set(0, -0.52, 0.3);
-  group.add(keel);
-
-  // Weapon bay doors (recessed panels)
+  // Dorsal fuselage lines — sit on the hull surface (y: 0.40 = hull top)
   for (const side of [-1, 1]) {
-    const bayGeo = new THREE.BoxGeometry(0.5, 0.03, 1.2);
-    const bay = new THREE.Mesh(bayGeo);
-    bay.name = 'armor-dark';
-    bay.position.set(side * 0.4, -0.48, 0.4);
-    group.add(bay);
-    // Bay outline accents
-    const bayEdge = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.02, 0.03));
-    bayEdge.name = 'accent';
-    bayEdge.position.set(side * 0.4, -0.47, 1.0);
-    group.add(bayEdge);
-    const bayEdge2 = bayEdge.clone();
-    bayEdge2.position.z = -0.2;
-    group.add(bayEdge2);
-  }
-
-  // Weapon pylons under wings
-  for (const side of [-1, 1]) {
-    const pyGeo = new THREE.CylinderGeometry(0.08, 0.12, 0.9, 10);
-    pyGeo.rotateX(-Math.PI / 2);
-    const pylon = new THREE.Mesh(pyGeo);
-    pylon.name = 'hull';
-    pylon.position.set(side * 1.8, -0.2, 0.1);
-    group.add(pylon);
-    // Missile shape on pylon
-    const missGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.7, 8);
-    missGeo.rotateX(-Math.PI / 2);
-    const missile = new THREE.Mesh(missGeo);
-    missile.name = 'hull';
-    missile.position.set(side * 1.8, -0.32, 0.1);
-    group.add(missile);
-    const mTip = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.15, 8));
-    mTip.rotateX(-Math.PI / 2);
-    mTip.name = 'hull';
-    mTip.position.set(side * 1.8, -0.32, 0.52);
-    group.add(mTip);
-  }
-
-  // Small ventral fins at rear
-  for (const side of [-1, 1]) {
-    const vfGeo = new THREE.BoxGeometry(0.04, 0.35, 0.5);
-    const vfPos = vfGeo.attributes.position;
-    for (let i = 0; i < vfPos.count; i++) {
-      if (vfPos.getY(i) < 0) vfPos.setZ(i, vfPos.getZ(i) * 0.6);
-    }
-    vfGeo.computeVertexNormals();
-    const vFin = new THREE.Mesh(vfGeo);
-    vFin.name = 'hull';
-    vFin.position.set(side * 0.62, -0.4, -2.6);
-    vFin.rotation.z = side * 0.1;
-    group.add(vFin);
-  }
-
-  // ═══════════════════════════════════════════════════════════
-  // ACCENT PANEL LINES — red glowing seams
-  // ═══════════════════════════════════════════════════════════
-  // Dorsal spine lines
-  for (const side of [-1, 1]) {
-    const aGeo = new THREE.BoxGeometry(0.035, 0.035, 4.5);
+    const aGeo = new THREE.BoxGeometry(0.03, 0.01, 4.0);
     const accent = new THREE.Mesh(aGeo);
     accent.name = 'accent';
-    accent.position.set(side * 0.32, 0.44, 0.5);
+    accent.position.set(side * 0.28, 0.40, 0.2);
     group.add(accent);
   }
-  // Ventral lines
+  // Wing leading edge lines — sit on wing top surface (y: 0.02)
   for (const side of [-1, 1]) {
-    const aGeo = new THREE.BoxGeometry(0.035, 0.035, 2.8);
+    const aGeo = new THREE.BoxGeometry(3.0, 0.01, 0.03);
     const accent = new THREE.Mesh(aGeo);
     accent.name = 'accent';
-    accent.position.set(side * 0.45, -0.44, 0.2);
+    accent.position.set(side * 1.9, 0.06, 0.4);
     group.add(accent);
   }
-  // Wing leading edge lines
+  // Engine accent rings — sit on engine housing
   for (const side of [-1, 1]) {
-    const aGeo = new THREE.BoxGeometry(3.5, 0.03, 0.03);
-    const accent = new THREE.Mesh(aGeo);
-    accent.name = 'accent';
-    accent.position.set(side * 2.5, 0.04, 0.9);
-    group.add(accent);
-  }
-  // Engine accent rings
-  for (const side of [-1, 1]) {
-    const aGeo = new THREE.TorusGeometry(0.5, 0.02, 8, 20);
+    const aGeo = new THREE.TorusGeometry(0.5, 0.015, 8, 20);
     const accent = new THREE.Mesh(aGeo);
     accent.name = 'accent';
     accent.position.set(side * 0.62, -0.05, -1.3);
     group.add(accent);
-    // Second ring at rear
     const a2 = new THREE.Mesh(aGeo.clone());
     a2.name = 'accent';
     a2.position.set(side * 0.62, -0.05, -2.8);
     group.add(a2);
   }
-  // Fuselage cross-seam accents
-  for (const z of [1.5, 0.0, -0.8]) {
-    const seam = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.03, 0.03));
-    seam.name = 'accent';
-    seam.position.set(0, 0.45, z);
-    group.add(seam);
-  }
 
-  // ═══════════════════════════════════════════════════════════
-  // DARK ARMOR PANELS
-  // ═══════════════════════════════════════════════════════════
-  const armorUnder = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.04, 2.2));
-  armorUnder.name = 'armor-dark';
-  armorUnder.position.set(0, -0.47, 0.3);
-  group.add(armorUnder);
-
-  for (const side of [-1, 1]) {
-    const wPanel = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.06, 0.9));
-    wPanel.name = 'armor-dark';
-    wPanel.position.set(side * 3.0, 0.06, -0.3);
-    group.add(wPanel);
-  }
 
   // ═══════════════════════════════════════════════════════════
   // NAVIGATION LIGHTS — red port, green starboard
   // ═══════════════════════════════════════════════════════════
   const navL = new THREE.PointLight(0xff0000, 1.5, 8, 2);
-  navL.position.set(-5.0, 0.3, -0.5);
+  navL.position.set(-4.0, 0.3, -0.5);
   group.add(navL);
   const navR = new THREE.PointLight(0x00ff00, 1.5, 8, 2);
-  navR.position.set(5.0, 0.3, -0.5);
+  navR.position.set(4.0, 0.3, -0.5);
   group.add(navR);
 
   // Tail warning light
@@ -876,6 +761,13 @@ export function createEnemyShipGeometry(): THREE.Group {
   const accentLight2 = new THREE.PointLight(0xff2200, 1.5, 12, 2);
   accentLight2.position.set(0, -0.5, -1.0);
   group.add(accentLight2);
+
+  // Additional accent lights at engine bays
+  for (const side of [-1, 1]) {
+    const engGlow = new THREE.PointLight(0xff2200, 0.8, 6, 2);
+    engGlow.position.set(side * 0.62, -0.05, -3.0);
+    group.add(engGlow);
+  }
 
   return group;
 }

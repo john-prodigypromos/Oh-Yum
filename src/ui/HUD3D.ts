@@ -104,16 +104,16 @@ export class HUD3D {
 
       /* ── Villain taunt popup ── */
       .taunt-popup {
-        position:fixed;top:80px;right:20px;
-        max-width:260px;padding:10px 16px;
+        position:fixed;bottom:60px;left:50%;transform:translateX(-50%);
+        max-width:420px;padding:12px 22px;
         background:rgba(30,6,6,0.8);
         border:1px solid rgba(255,59,59,0.3);border-radius:6px;
-        color:#ff8866;font-size:14px;font-style:italic;
+        color:#ff8866;font-size:18px;font-style:italic;
         font-family:var(--font-body);letter-spacing:0.5px;
         z-index:25;pointer-events:none;
         opacity:0;transition:opacity 0.3s ease-out;
         text-shadow:0 0 6px rgba(255,50,0,0.2);
-        line-height:1.4;
+        line-height:1.4;text-align:center;
         backdrop-filter:blur(8px);
       }
       .taunt-popup.visible { opacity:1; }
@@ -156,23 +156,27 @@ export class HUD3D {
     hullContainer.appendChild(this.hullBar);
     topLeft.appendChild(hullContainer);
 
-    // Prodigy logo + Pilot portrait
+    // Pilot portrait + logo/name column
     const pilotRow = document.createElement('div');
-    pilotRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:8px;';
-    const prodigyLogo = document.createElement('img');
-    prodigyLogo.src = '/portraits/prodigy-logo.png';
-    prodigyLogo.alt = 'Prodigy';
-    prodigyLogo.style.cssText = 'width:24px;height:24px;object-fit:contain;';
-    pilotRow.appendChild(prodigyLogo);
+    pilotRow.style.cssText = 'display:flex;align-items:center;gap:10px;margin-top:8px;';
     const pilotImg = document.createElement('img');
     pilotImg.src = `/portraits/${currentCharacter}.jpg`;
     pilotImg.alt = currentCharacter;
     pilotImg.style.cssText = 'width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid rgba(100,150,200,0.3);';
     pilotRow.appendChild(pilotImg);
+    // Stacked column: logo above name
+    const pilotInfo = document.createElement('div');
+    pilotInfo.style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:2px;';
+    const prodigyLogo = document.createElement('img');
+    prodigyLogo.src = '/portraits/prodigy-logo.png';
+    prodigyLogo.alt = 'Prodigy';
+    prodigyLogo.style.cssText = 'width:22px;height:22px;object-fit:contain;';
+    pilotInfo.appendChild(prodigyLogo);
     const pilotName = document.createElement('div');
     pilotName.textContent = currentCharacter.toUpperCase();
     pilotName.style.cssText = 'font-size:11px;font-weight:600;color:rgba(136,170,204,0.7);letter-spacing:2px;';
-    pilotRow.appendChild(pilotName);
+    pilotInfo.appendChild(pilotName);
+    pilotRow.appendChild(pilotInfo);
     topLeft.appendChild(pilotRow);
 
     this.container.appendChild(topLeft);

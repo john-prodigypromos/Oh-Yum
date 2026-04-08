@@ -248,7 +248,7 @@ export function updateArena(
 
   // Pitch: ArrowUp = nose DOWN, ArrowDown = nose UP (inverted Y-axis, flight-sim style)
   const keyPitch = (keys['ArrowUp'] ? -1 : 0) + (keys['ArrowDown'] ? 1 : 0);
-  const touchPitch = Math.abs(touch.pitch) > 0 ? -touch.pitch : 0;
+  const touchPitch = touch.pitch;
 
   // Thrust: E=forward, D=reverse on desktop, touch buttons on mobile
   const keyThrust = (keys['KeyE'] ? 1 : 0) + (keys['KeyD'] ? -1 : 0);

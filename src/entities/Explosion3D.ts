@@ -270,8 +270,8 @@ export class ExplosionPool {
       const angle = Math.random() * Math.PI * 2;
       const dist = 20 + Math.random() * 150;
       const delay = Math.random() * 500;
-      const w2 = 8 + Math.random() * 14;
-      const h2 = 3 + Math.random() * 6;
+      const w2 = 4 + Math.random() * 8;
+      const h2 = 2 + Math.random() * 3;
       const rot = Math.floor(Math.random() * 360);
       setTimeout(() => {
         const pos = project();
@@ -353,8 +353,8 @@ export class ExplosionPool {
     for (let i = 0; i < 50; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 20 + Math.random() * 150;
-      const w2 = 6 + Math.random() * 16;
-      const h2 = 2 + Math.random() * 7;
+      const w2 = 3 + Math.random() * 9;
+      const h2 = 1 + Math.random() * 4;
       const rot = Math.floor(Math.random() * 360);
       const dx = Math.cos(angle) * dist;
       const dy = Math.sin(angle) * dist;

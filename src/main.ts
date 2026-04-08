@@ -171,7 +171,7 @@ function showTitleOverlay(): void {
   panel.appendChild(title);
 
   const spacer = document.createElement('div');
-  spacer.style.cssText = 'margin-bottom:30px;';
+  spacer.style.cssText = 'margin-bottom:clamp(10px,3vh,30px);';
   panel.appendChild(spacer);
 
   const selectLabel = document.createElement('div');
@@ -240,23 +240,36 @@ function showCharSelectOverlay(): void {
   const charEntries = Object.entries(CHARACTERS) as [CharacterName, CharacterConfig][];
 
   const grid = document.createElement('div');
-  grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:16px;justify-content:center;max-width:min(900px,95vw);';
+  grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:clamp(6px,2vw,16px);justify-content:center;max-width:min(900px,95vw);';
 
   for (const [id, cfg] of charEntries) {
     const hex = '#' + cfg.color.toString(16).padStart(6, '0');
     const card = document.createElement('button');
     card.className = 'char-card';
     card.style.borderColor = hex;
-    card.style.width = 'min(140px, 22vw)';
-    card.style.padding = '12px 10px';
+    card.style.width = 'min(210px, clamp(80px, 22vw, 210px))';
+    card.style.padding = 'clamp(6px, 1.5vw, 14px) clamp(4px, 1vw, 12px)';
 
-    // Portrait image
+    // Portrait wrapper — fixed-size circle that clips the image inside
+    const portraitWrap = document.createElement('div');
+    const portraitSize = 'clamp(55px,16vw,165px)';
+    portraitWrap.style.cssText = `width:${portraitSize};height:${portraitSize};border-radius:50%;overflow:hidden;margin:0 auto 8px;border:2px solid ${hex};flex-shrink:0;`;
+
     const portrait = document.createElement('img');
     portrait.src = `/portraits/${id}.jpg`;
     portrait.alt = cfg.label;
-    portrait.className = 'portrait-hero';
-    portrait.style.cssText = `width:clamp(70px,16vw,110px);height:clamp(70px,16vw,110px);margin-bottom:8px;border-color:${hex};`;
-    card.appendChild(portrait);
+    // Per-character zoom: scale controls crop tightness, position centers the face
+    // scale > 1 = zoom in on face, scale < 1 = zoom out to show more
+    const cropOverrides: Record<string, { scale: number; pos: string }> = {
+      owen: { scale: 1.15, pos: '50% 35%' },
+      william: { scale: 1.1, pos: '50% 40%' },
+      ethan: { scale: 1.1, pos: '50% 35%' },
+      austin: { scale: 1, pos: '50% 45%' },
+    };
+    const crop = cropOverrides[id] || { scale: 1, pos: '50% 40%' };
+    portrait.style.cssText = `width:100%;height:100%;object-fit:cover;object-position:${crop.pos};transform:scale(${crop.scale});`;
+    portraitWrap.appendChild(portrait);
+    card.appendChild(portraitWrap);
 
     const name = document.createElement('div');
     name.textContent = cfg.label;
@@ -307,7 +320,7 @@ function showLevelIntroOverlay(): void {
 
   // ── Villain intro cards — show new enemies for this level ──
   const villainRow = document.createElement('div');
-  villainRow.style.cssText = 'display:flex;gap:30px;margin-top:30px;opacity:0;animation:fadeIn 0.6s 0.8s forwards;';
+  villainRow.style.cssText = 'display:flex;gap:clamp(10px,3vw,30px);margin-top:clamp(12px,3vh,30px);opacity:0;animation:fadeIn 0.6s 0.8s forwards;flex-wrap:wrap;justify-content:center;';
 
   // Show villains up to current level (Level 1 = index 0, Level 2 = 0+1, etc.)
   for (let i = 0; i < level.level && i < VILLAIN_INTROS.length; i++) {
@@ -531,8 +544,8 @@ function showGameOverOverlay(): void {
   villainImg.src = `/portraits/${villainFile}`;
   villainImg.alt = 'Villain';
   villainImg.style.cssText = `
-    width:clamp(100px,22vw,180px);height:clamp(100px,22vw,180px);border-radius:50%;object-fit:cover;
-    border:3px solid var(--red);margin-bottom:12px;
+    width:clamp(80px,18vw,180px);height:clamp(80px,18vw,180px);border-radius:50%;object-fit:cover;
+    border:3px solid var(--red);margin-bottom:clamp(6px,1.5vh,12px);
     filter:drop-shadow(0 0 20px var(--red-glow));
     animation:villainBounce 0.5s ease-out;
   `;
@@ -545,8 +558,8 @@ function showGameOverOverlay(): void {
   const monologue = document.createElement('div');
   monologue.textContent = winLine;
   monologue.style.cssText = `
-    font-size:clamp(20px,5vw,36px);font-weight:700;color:var(--red);font-style:italic;
-    letter-spacing:2px;margin-bottom:16px;text-align:center;
+    font-size:clamp(16px,4vw,36px);font-weight:700;color:var(--red);font-style:italic;
+    letter-spacing:2px;margin-bottom:clamp(8px,1.5vh,16px);text-align:center;
     text-shadow:0 0 20px var(--red-glow);
     animation:villainBounce 0.5s ease-out;
   `;

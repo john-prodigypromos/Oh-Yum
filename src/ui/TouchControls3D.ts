@@ -60,12 +60,22 @@ export class TouchControls3D {
     this.thrustRadius = Math.round(ref * 0.09);
     this.reverseRadius = Math.round(ref * 0.09);
 
-    const margin = Math.round(ref * 0.22);
-    const joystickBottomMargin = Math.round(ref * 0.35); // extra clearance above score HUD
-    this.joystickCenter = { x: margin, y: h - joystickBottomMargin };
-    this.fireCenter = { x: w - margin, y: h - margin };
-    this.thrustCenter = { x: w - margin, y: h - margin - this.fireRadius * 3 };
-    this.reverseCenter = { x: w - margin, y: h - margin - this.fireRadius * 3 - this.thrustRadius * 2.8 };
+    // Right-side button cluster:
+    // THRUST (green) = bottom-right, just above "PRIDAY LABS"
+    // REVERSE (red) = same row, left of THRUST
+    // FIRE (blue) = above THRUST, slightly more spacing than the horizontal gap
+    const rMargin = Math.round(ref * 0.18);          // right edge inset
+    const bMargin = Math.round(ref * 0.18);           // bottom edge inset
+    const hGap = this.thrustRadius + this.reverseRadius + Math.round(ref * 0.06); // horizontal gap
+    const vGap = this.thrustRadius + this.fireRadius + Math.round(ref * 0.1);     // vertical gap (a bit more)
+
+    this.thrustCenter  = { x: w - rMargin, y: h - bMargin };
+    this.reverseCenter = { x: w - rMargin - hGap, y: h - bMargin };
+    this.fireCenter    = { x: w - rMargin, y: h - bMargin - vGap };
+
+    const joystickBottomMargin = Math.round(ref * 0.35);
+    const joystickLeftMargin = Math.round(ref * 0.22);
+    this.joystickCenter = { x: joystickLeftMargin, y: h - joystickBottomMargin };
 
     if (this.enabled) {
       this.setupTouch();
@@ -89,12 +99,18 @@ export class TouchControls3D {
     this.thrustRadius = Math.round(ref * 0.09);
     this.reverseRadius = Math.round(ref * 0.09);
 
-    const margin = Math.round(ref * 0.22);
-    const joystickBottomMargin = Math.round(ref * 0.35); // extra clearance above score HUD
-    this.joystickCenter = { x: margin, y: h - joystickBottomMargin };
-    this.fireCenter = { x: w - margin, y: h - margin };
-    this.thrustCenter = { x: w - margin, y: h - margin - this.fireRadius * 3 };
-    this.reverseCenter = { x: w - margin, y: h - margin - this.fireRadius * 3 - this.thrustRadius * 2.8 };
+    const rMargin = Math.round(ref * 0.18);
+    const bMargin = Math.round(ref * 0.18);
+    const hGap = this.thrustRadius + this.reverseRadius + Math.round(ref * 0.06);
+    const vGap = this.thrustRadius + this.fireRadius + Math.round(ref * 0.1);
+
+    this.thrustCenter  = { x: w - rMargin, y: h - bMargin };
+    this.reverseCenter = { x: w - rMargin - hGap, y: h - bMargin };
+    this.fireCenter    = { x: w - rMargin, y: h - bMargin - vGap };
+
+    const joystickBottomMargin = Math.round(ref * 0.35);
+    const joystickLeftMargin = Math.round(ref * 0.22);
+    this.joystickCenter = { x: joystickLeftMargin, y: h - joystickBottomMargin };
   }
 
   private setupTouch(): void {
@@ -181,7 +197,7 @@ export class TouchControls3D {
 
     return {
       yaw: Math.abs(this.joystickDelta.x) > 0.15 ? this.joystickDelta.x : 0,
-      pitch: Math.abs(this.joystickDelta.y) > 0.15 ? -this.joystickDelta.y : 0, // inverted: push up = pitch down
+      pitch: Math.abs(this.joystickDelta.y) > 0.15 ? this.joystickDelta.y : 0, // push up = ship goes up
       thrust: (this.thrustPressed ? 1 : 0) + (this.reversePressed ? -1 : 0),
       fire: this.firePressed,
     };
@@ -207,32 +223,25 @@ export class TouchControls3D {
     ctx.arc(thumbX, thumbY, this.joystickRadius * 0.3, 0, Math.PI * 2);
     ctx.fill();
 
-    // Fire button — cyan matching player laser bolts (#00ddff)
-    ctx.fillStyle = this.firePressed ? 'rgba(0,221,255,0.5)' : 'rgba(0,221,255,0.25)';
-    ctx.beginPath();
-    ctx.arc(this.fireCenter.x, this.fireCenter.y, this.fireRadius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,221,255,0.5)';
-    ctx.stroke();
-
-    ctx.fillStyle = 'rgba(0,221,255,0.7)';
-    ctx.font = 'bold 16px Rajdhani';
+    // Consistent modern font for all button labels
+    const labelFont = '600 13px "Rajdhani", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('FIRE', this.fireCenter.x, this.fireCenter.y + 4);
+    ctx.textBaseline = 'middle';
 
-    // Thrust button — green
+    // Thrust button — green, bottom-right
     ctx.fillStyle = this.thrustPressed ? 'rgba(68,255,68,0.5)' : 'rgba(68,255,68,0.25)';
     ctx.beginPath();
     ctx.arc(this.thrustCenter.x, this.thrustCenter.y, this.thrustRadius, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = 'rgba(68,255,68,0.5)';
+    ctx.lineWidth = 2;
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(68,255,68,0.7)';
-    ctx.font = 'bold 14px Rajdhani';
-    ctx.fillText('THRUST', this.thrustCenter.x, this.thrustCenter.y + 4);
+    ctx.fillStyle = 'rgba(68,255,68,0.8)';
+    ctx.font = labelFont;
+    ctx.fillText('THRUST', this.thrustCenter.x, this.thrustCenter.y);
 
-    // Reverse button — red
+    // Reverse button — red, left of thrust
     ctx.fillStyle = this.reversePressed ? 'rgba(255,68,68,0.5)' : 'rgba(255,68,68,0.25)';
     ctx.beginPath();
     ctx.arc(this.reverseCenter.x, this.reverseCenter.y, this.reverseRadius, 0, Math.PI * 2);
@@ -240,9 +249,21 @@ export class TouchControls3D {
     ctx.strokeStyle = 'rgba(255,68,68,0.5)';
     ctx.stroke();
 
-    ctx.fillStyle = 'rgba(255,68,68,0.7)';
-    ctx.font = 'bold 14px Rajdhani';
-    ctx.fillText('REVERSE', this.reverseCenter.x, this.reverseCenter.y + 4);
+    ctx.fillStyle = 'rgba(255,68,68,0.8)';
+    ctx.font = labelFont;
+    ctx.fillText('REVERSE', this.reverseCenter.x, this.reverseCenter.y);
+
+    // Fire button — cyan, above thrust
+    ctx.fillStyle = this.firePressed ? 'rgba(0,221,255,0.5)' : 'rgba(0,221,255,0.25)';
+    ctx.beginPath();
+    ctx.arc(this.fireCenter.x, this.fireCenter.y, this.fireRadius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(0,221,255,0.5)';
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(0,221,255,0.8)';
+    ctx.font = '600 15px "Rajdhani", sans-serif';
+    ctx.fillText('FIRE', this.fireCenter.x, this.fireCenter.y);
   }
 
   isEnabled(): boolean { return this.enabled; }
