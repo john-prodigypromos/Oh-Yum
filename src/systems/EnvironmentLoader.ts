@@ -26,16 +26,337 @@ interface Asteroid {
   alive: boolean;
 }
 
+// ── Smooth 3D value noise for organic rock shapes ──
+function _hash3(x: number, y: number, z: number): number {
+  let n = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
+  return n - Math.floor(n);
+}
+function _lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
+function _fade(t: number): number { return t * t * t * (t * (t * 6 - 15) + 10); }
+function valueNoise3D(x: number, y: number, z: number): number {
+  const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+  const fx = _fade(x - ix), fy = _fade(y - iy), fz = _fade(z - iz);
+  const n000 = _hash3(ix, iy, iz), n100 = _hash3(ix + 1, iy, iz);
+  const n010 = _hash3(ix, iy + 1, iz), n110 = _hash3(ix + 1, iy + 1, iz);
+  const n001 = _hash3(ix, iy, iz + 1), n101 = _hash3(ix + 1, iy, iz + 1);
+  const n011 = _hash3(ix, iy + 1, iz + 1), n111 = _hash3(ix + 1, iy + 1, iz + 1);
+  return _lerp(
+    _lerp(_lerp(n000, n100, fx), _lerp(n010, n110, fx), fy),
+    _lerp(_lerp(n001, n101, fx), _lerp(n011, n111, fx), fy),
+    fz,
+  ) * 2 - 1; // remap to -1..1
+}
+
+/** FBM (fractal brownian motion) — stacks noise octaves for organic detail. */
+function fbm3D(x: number, y: number, z: number, octaves: number, lacunarity = 2.0, gain = 0.5): number {
+  let value = 0, amp = 1, freq = 1, norm = 0;
+  for (let o = 0; o < octaves; o++) {
+    value += amp * valueNoise3D(x * freq, y * freq, z * freq);
+    norm += amp;
+    amp *= gain;
+    freq *= lacunarity;
+  }
+  return value / norm;
+}
+
+/** Ridged noise — creates sharp crags and ridgelines. */
+function ridgedNoise3D(x: number, y: number, z: number, octaves: number): number {
+  let value = 0, amp = 1, freq = 1, norm = 0, prev = 1;
+  for (let o = 0; o < octaves; o++) {
+    let n = Math.abs(valueNoise3D(x * freq, y * freq, z * freq));
+    n = 1 - n; // invert for ridges
+    n = n * n;  // sharpen
+    n *= prev;  // reduce amplitude near valleys
+    prev = n;
+    value += amp * n;
+    norm += amp;
+    amp *= 0.5;
+    freq *= 2.1;
+  }
+  return value / norm * 2 - 1;
+}
+
+/** Domain-warped FBM — feeds noise through another noise layer for truly organic, swirly shapes. */
+function warpedFbm3D(x: number, y: number, z: number, octaves: number, warpStrength = 0.8): number {
+  const wx = x + warpStrength * fbm3D(x + 0.0, y + 3.2, z + 1.3, 3);
+  const wy = y + warpStrength * fbm3D(x + 5.2, y + 1.3, z + 2.8, 3);
+  const wz = z + warpStrength * fbm3D(x + 2.1, y + 7.8, z + 4.1, 3);
+  return fbm3D(wx, wy, wz, octaves);
+}
+
+/** Double domain warp — two passes of coordinate distortion for maximum organic chaos. */
+function doubleWarpedFbm3D(x: number, y: number, z: number, octaves: number): number {
+  // First warp
+  const w1x = x + 0.7 * fbm3D(x + 0.0, y + 3.2, z + 1.3, 3);
+  const w1y = y + 0.7 * fbm3D(x + 5.2, y + 1.3, z + 2.8, 3);
+  const w1z = z + 0.7 * fbm3D(x + 2.1, y + 7.8, z + 4.1, 3);
+  // Second warp on warped coords
+  const w2x = w1x + 0.5 * fbm3D(w1x + 1.7, w1y + 9.2, w1z + 3.4, 3);
+  const w2y = w1y + 0.5 * fbm3D(w1x + 8.3, w1y + 2.8, w1z + 5.1, 3);
+  const w2z = w1z + 0.5 * fbm3D(w1x + 4.6, w1y + 6.1, w1z + 0.9, 3);
+  return fbm3D(w2x, w2y, w2z, octaves);
+}
+
+/** Generates a procedural normal map on canvas — micro craters, grain, and pitting. */
+function createAsteroidNormalMap(size: number, seed: number): THREE.CanvasTexture {
+  const c = document.createElement('canvas');
+  c.width = size; c.height = size;
+  const ctx = c.getContext('2d')!;
+  const img = ctx.createImageData(size, size);
+  const d = img.data;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const idx = (y * size + x) * 4;
+      const u = x / size, v = y / size;
+
+      // Micro-crater pitting
+      const pit1 = valueNoise3D(u * 40 + seed, v * 40, seed * 0.3);
+      const pit2 = valueNoise3D(u * 80 + seed * 2, v * 80, seed * 0.7);
+      const pit = pit1 * 0.6 + pit2 * 0.4;
+
+      // Grain texture
+      const grain = valueNoise3D(u * 120 + seed, v * 120 + seed, 0) * 0.3;
+
+      // Compute normal from height (central difference)
+      const eps = 1.0 / size;
+      const hL = valueNoise3D((u - eps) * 40 + seed, v * 40, seed * 0.3);
+      const hR = valueNoise3D((u + eps) * 40 + seed, v * 40, seed * 0.3);
+      const hD = valueNoise3D(u * 40 + seed, (v - eps) * 40, seed * 0.3);
+      const hU = valueNoise3D(u * 40 + seed, (v + eps) * 40, seed * 0.3);
+
+      let nx = (hL - hR) * 3.0;
+      let ny = (hD - hU) * 3.0;
+      let nz = 1.0;
+      // Add grain perturbation
+      nx += grain * 0.15;
+      ny += grain * 0.15;
+
+      // Normalize
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+      nx /= len; ny /= len; nz /= len;
+
+      // Encode as RGB (tangent space: 0.5 = zero)
+      d[idx]     = Math.round((nx * 0.5 + 0.5) * 255);
+      d[idx + 1] = Math.round((ny * 0.5 + 0.5) * 255);
+      d[idx + 2] = Math.round((nz * 0.5 + 0.5) * 255);
+      d[idx + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** Create a single asteroid mesh — reusable for both arena and viewer.
+ *  Returns a Group containing the main body + surface boulders. */
+export function createAsteroidMesh(radius: number, seed: number): { mesh: THREE.Mesh; mat: THREE.MeshStandardMaterial; group?: THREE.Group } {
+  const detail = radius > 14 ? 4 : radius > 7 ? 3 : 2;
+  const geo = new THREE.IcosahedronGeometry(1, detail);
+  const posAttr = geo.attributes.position;
+
+  const rng = () => { seed = (seed * 16807 + 7) % 2147483647; return (seed - 1) / 2147483646; };
+
+  // ── Contact binary / multi-lobe implicit field ──
+  // Like Itokawa and Arrokoth — 1-3 fused lobes create peanut/snowman shapes
+  const lobeCenterCount = 1 + Math.floor(rng() * 2.5); // 1-3 major lobes
+  const lobeCenters: Array<{ pos: THREE.Vector3; r: number; weight: number }> = [];
+  // Primary lobe at origin
+  lobeCenters.push({ pos: new THREE.Vector3(0, 0, 0), r: 1.0, weight: 1.0 });
+  for (let l = 1; l < lobeCenterCount; l++) {
+    const theta = rng() * Math.PI * 2;
+    const phi = Math.acos(2 * rng() - 1);
+    const dist = 0.5 + rng() * 0.6; // offset from center
+    const lobeR = 0.5 + rng() * 0.5; // sub-lobe size relative to main
+    lobeCenters.push({
+      pos: new THREE.Vector3(
+        Math.sin(phi) * Math.cos(theta) * dist,
+        Math.sin(phi) * Math.sin(theta) * dist,
+        Math.cos(phi) * dist,
+      ),
+      r: lobeR,
+      weight: 0.6 + rng() * 0.4,
+    });
+  }
+
+  // Axis stretch
+  const stretchX = 0.55 + rng() * 0.9;
+  const stretchY = 0.55 + rng() * 0.9;
+  const stretchZ = 0.55 + rng() * 0.9;
+  const ox = rng() * 100, oy = rng() * 100, oz = rng() * 100;
+
+  // Flat plateau regions — 1-3 random planes that clamp displacement
+  const plateauCount = Math.floor(rng() * 3);
+  const plateaus: Array<{ normal: THREE.Vector3; threshold: number }> = [];
+  for (let p = 0; p < plateauCount; p++) {
+    const theta = rng() * Math.PI * 2;
+    const phi = Math.acos(2 * rng() - 1);
+    plateaus.push({
+      normal: new THREE.Vector3(
+        Math.sin(phi) * Math.cos(theta),
+        Math.sin(phi) * Math.sin(theta),
+        Math.cos(phi),
+      ),
+      threshold: 0.75 + rng() * 0.2, // how deep the flat cut goes
+    });
+  }
+
+  const vertCount = posAttr.count;
+  const colors = new Float32Array(vertCount * 3);
+  // Store displacement values for AO pass
+  const displacements = new Float32Array(vertCount);
+
+  // Base color palette
+  const colorType = rng();
+  let baseR: number, baseG: number, baseB: number;
+  if (colorType < 0.2) { baseR = 0.24; baseG = 0.17; baseB = 0.10; }
+  else if (colorType < 0.4) { baseR = 0.33; baseG = 0.27; baseB = 0.20; }
+  else if (colorType < 0.6) { baseR = 0.27; baseG = 0.25; baseB = 0.25; }
+  else if (colorType < 0.8) { baseR = 0.17; baseG = 0.15; baseB = 0.13; }
+  else { baseR = 0.30; baseG = 0.22; baseB = 0.16; } // rusty iron
+
+  for (let v = 0; v < vertCount; v++) {
+    const x = posAttr.getX(v);
+    const y = posAttr.getY(v);
+    const z = posAttr.getZ(v);
+    const len = Math.sqrt(x * x + y * y + z * z);
+    if (len < 0.001) continue;
+    const nx = x / len, ny = y / len, nz = z / len;
+
+    const sx = nx + ox, sy = ny + oy, sz = nz + oz;
+
+    // ── Multi-lobe implicit field — smooth union of spheres ──
+    let lobeField = 0;
+    for (const lc of lobeCenters) {
+      const dx = nx - lc.pos.x, dy = ny - lc.pos.y, dz = nz - lc.pos.z;
+      const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      // Smooth metaball falloff
+      const t = Math.max(0, 1 - d / (lc.r * 1.5));
+      lobeField += lc.weight * t * t * (3 - 2 * t); // smoothstep
+    }
+    lobeField = Math.min(lobeField, 1.4); // cap
+
+    // ── Double domain-warped large-scale — maximum organic chaos ──
+    const big = doubleWarpedFbm3D(sx * 1.0, sy * 1.0, sz * 1.0, 4) * 0.45;
+
+    // ── Ridged crags with warped input — less uniform ──
+    const warpedSx = sx + 0.3 * valueNoise3D(sx * 2, sy * 2, sz * 2);
+    const warpedSy = sy + 0.3 * valueNoise3D(sx * 2 + 5, sy * 2, sz * 2);
+    const mid = ridgedNoise3D(warpedSx * 3.5, warpedSy * 3.5, sz * 3.5, 4) * 0.20;
+
+    // ── Fine surface roughness ──
+    const fine = fbm3D(sx * 12, sy * 12, sz * 12, 3) * 0.06;
+
+    // ── Multi-scale craters — small and large bowls ──
+    let crater = 0;
+    // Large craters
+    const cNoise1 = valueNoise3D(sx * 2.5, sy * 2.5, sz * 2.5);
+    if (cNoise1 > 0.55) {
+      const depth = (cNoise1 - 0.55) * 2.2;
+      crater -= depth * depth * 0.35;
+      if (cNoise1 < 0.65) crater += 0.04; // rim
+    }
+    // Small craters
+    const cNoise2 = valueNoise3D(sx * 7, sy * 7, sz * 7);
+    if (cNoise2 > 0.6) {
+      crater -= (cNoise2 - 0.6) * 0.25;
+    }
+
+    let displacement = (lobeField * 0.7 + 0.3 + big + mid + fine + crater) * radius;
+
+    // ── Flat plateau clamp — creates flat faceted faces ──
+    for (const pl of plateaus) {
+      const dot = nx * pl.normal.x + ny * pl.normal.y + nz * pl.normal.z;
+      if (dot > 0.7) {
+        const flatAmount = (dot - 0.7) / 0.3; // 0-1
+        const clamped = pl.threshold * radius;
+        displacement = displacement * (1 - flatAmount * 0.6) + clamped * flatAmount * 0.6;
+      }
+    }
+
+    displacements[v] = displacement;
+
+    posAttr.setXYZ(v,
+      nx * displacement * stretchX,
+      ny * displacement * stretchY,
+      nz * displacement * stretchZ,
+    );
+
+    // ── Vertex color ──
+    const colorNoise = warpedFbm3D(sx * 2.5, sy * 2.5, sz * 2.5, 3, 0.5);
+    const streakNoise = ridgedNoise3D(sx * 8, sy * 8, sz * 8, 2);
+    const dustNoise = fbm3D(sx * 1.2, sy * 1.2, sz * 1.2, 2);
+    const ironNoise = valueNoise3D(sx * 5, sy * 5, sz * 5);
+
+    const ridgeBright = Math.max(0, mid) * 1.8;
+    const valleyDark = Math.min(0, crater) * 2.5;
+    const variation = colorNoise * 0.3 + streakNoise * 0.12 + ridgeBright + valleyDark;
+
+    // Warm dust patches
+    const dustTint = dustNoise > 0.2 ? (dustNoise - 0.2) * 0.25 : 0;
+    // Dark metallic iron veins
+    const ironTint = ironNoise > 0.7 ? (ironNoise - 0.7) * 0.5 : 0;
+
+    colors[v * 3]     = Math.max(0, Math.min(1, baseR + variation * 0.35 + dustTint - ironTint * 0.3));
+    colors[v * 3 + 1] = Math.max(0, Math.min(1, baseG + variation * 0.28 - ironTint * 0.2));
+    colors[v * 3 + 2] = Math.max(0, Math.min(1, baseB + variation * 0.22 - dustTint * 0.4 + ironTint * 0.05));
+  }
+
+  // ── Vertex ambient occlusion pass — darken concave areas ──
+  // Compare each vertex displacement to its neighbors to estimate concavity
+  const indexAttr = geo.index;
+  if (indexAttr) {
+    // Build adjacency: which vertices are neighbors
+    const adj: Set<number>[] = new Array(vertCount);
+    for (let i = 0; i < vertCount; i++) adj[i] = new Set();
+    for (let f = 0; f < indexAttr.count; f += 3) {
+      const a = indexAttr.getX(f), b = indexAttr.getX(f + 1), c = indexAttr.getX(f + 2);
+      adj[a].add(b); adj[a].add(c);
+      adj[b].add(a); adj[b].add(c);
+      adj[c].add(a); adj[c].add(b);
+    }
+    for (let v = 0; v < vertCount; v++) {
+      if (adj[v].size === 0) continue;
+      let avgNeighborDisp = 0;
+      for (const n of adj[v]) avgNeighborDisp += displacements[n];
+      avgNeighborDisp /= adj[v].size;
+      // If this vertex is lower than neighbors = concave = darker
+      const ao = Math.max(0, (avgNeighborDisp - displacements[v]) / radius);
+      const darken = ao * 2.5; // strength
+      colors[v * 3]     = Math.max(0, colors[v * 3] - darken * 0.15);
+      colors[v * 3 + 1] = Math.max(0, colors[v * 3 + 1] - darken * 0.15);
+      colors[v * 3 + 2] = Math.max(0, colors[v * 3 + 2] - darken * 0.12);
+    }
+  }
+
+  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.computeVertexNormals();
+
+  // ── Procedural normal map for micro detail ──
+  const normalMap = createAsteroidNormalMap(512, seed);
+
+  const mat = new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.85 + rng() * 0.15,
+    metalness: 0.03 + rng() * 0.12,
+    flatShading: true,
+    side: THREE.DoubleSide,
+    normalMap: normalMap,
+    normalScale: new THREE.Vector2(0.6, 0.6),
+  });
+
+  const mainMesh = new THREE.Mesh(geo, mat);
+
+  return { mesh: mainMesh, mat };
+}
+
 export function createAsteroidBelt(scene: THREE.Scene): LevelEnvironment {
   const asteroids: Asteroid[] = [];
   const count = 12 + Math.floor(Math.random() * 6); // 12-17
-
-  // Simple pseudo-noise for consistent rock displacement
-  function hashNoise(x: number, y: number, z: number): number {
-    let n = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
-    n = n - Math.floor(n);
-    return n * 2 - 1; // -1 to 1
-  }
 
   for (let i = 0; i < count; i++) {
     // Random size: small (4-7), medium (10-16), large (18-30)
@@ -45,50 +366,7 @@ export function createAsteroidBelt(scene: THREE.Scene): LevelEnvironment {
     else if (sizeRoll < 0.8) radius = 10 + Math.random() * 6;
     else radius = 18 + Math.random() * 12;
 
-    // Higher subdivision for more detailed rock surfaces
-    const detail = radius > 14 ? 3 : radius > 7 ? 2 : 1;
-    const geo = new THREE.IcosahedronGeometry(radius, detail);
-    const posAttr = geo.attributes.position;
-
-    // Multi-octave noise displacement for craggy, irregular rock shapes
-    for (let v = 0; v < posAttr.count; v++) {
-      const x = posAttr.getX(v);
-      const y = posAttr.getY(v);
-      const z = posAttr.getZ(v);
-      const len = Math.sqrt(x * x + y * y + z * z);
-      if (len < 0.001) continue;
-      const nx = x / len, ny = y / len, nz = z / len;
-
-      // Large-scale deformation (lumpy shape)
-      const big = hashNoise(nx * 2 + i, ny * 2, nz * 2) * 0.25;
-      // Medium crags
-      const mid = hashNoise(nx * 5 + i * 3, ny * 5, nz * 5) * 0.12;
-      // Fine surface roughness
-      const fine = hashNoise(nx * 12 + i * 7, ny * 12, nz * 12) * 0.06;
-      // Crater-like dimples (some vertices pushed inward)
-      const crater = hashNoise(nx * 8 + i, ny * 8 + i, nz * 8) > 0.6 ? -0.15 : 0;
-
-      const displacement = 1 + big + mid + fine + crater;
-      posAttr.setXYZ(v, nx * radius * displacement, ny * radius * displacement, nz * radius * displacement);
-    }
-    geo.computeVertexNormals();
-
-    // Per-asteroid material with color variation
-    const colorVar = Math.random();
-    let baseColor: number;
-    if (colorVar < 0.3) baseColor = 0x3d2b1a;       // dark brown
-    else if (colorVar < 0.6) baseColor = 0x554433;   // warm brown
-    else if (colorVar < 0.8) baseColor = 0x444040;   // grey rock
-    else baseColor = 0x2a2520;                         // near-black iron
-
-    const mat = new THREE.MeshStandardMaterial({
-      color: baseColor,
-      roughness: 0.85 + Math.random() * 0.15,
-      metalness: 0.05 + Math.random() * 0.15,
-      flatShading: true,
-    });
-
-    const mesh = new THREE.Mesh(geo, mat);
+    const { mesh } = createAsteroidMesh(radius, i);
 
     // Scatter within a ring around the player spawn area (avoid center)
     const angle = Math.random() * Math.PI * 2;
@@ -557,43 +835,7 @@ export function createBlackHole(scene: THREE.Scene): LevelEnvironment {
   group.add(disk2Mesh);
   disposables.push(disk2Geo, disk2Mat);
 
-  // ── 6. Thick spiral gas filament tubes (bright orange tendrils) ──
-  const filamentGroup = new THREE.Group();
-  filamentGroup.rotation.x = DISK_TILT;
-  const FILAMENT_COUNT = 14;
-  for (let w = 0; w < FILAMENT_COUNT; w++) {
-    const startAngle = (w / FILAMENT_COUNT) * Math.PI * 2 + Math.random() * 0.4;
-    const startR = 65 + Math.random() * 20;
-    const windFactor = 1.8 + Math.random() * 1.2; // tighter spirals
-    const points: THREE.Vector3[] = [];
-    for (let p = 0; p < 30; p++) {
-      const t = p / 29;
-      const a = startAngle + t * Math.PI * windFactor;
-      const r = startR + t * (60 + Math.random() * 80);
-      const h = (Math.random() - 0.5) * 12 * (1 - t * 0.7);
-      points.push(new THREE.Vector3(Math.cos(a) * r, h, Math.sin(a) * r));
-    }
-    const curve = new THREE.CatmullRomCurve3(points);
-    const thickness = 2.5 + Math.random() * 4;
-    const tubeGeo = new THREE.TubeGeometry(curve, 40, thickness, 8, false);
-    // Color: mix of bright orange, yellow-orange, and hot yellow
-    const colorRoll = Math.random();
-    const wColor = colorRoll < 0.3 ? 0xffaa22
-      : colorRoll < 0.6 ? 0xffcc44
-      : colorRoll < 0.85 ? 0xff7711
-      : 0xffdd66;
-    const tubeMat = new THREE.MeshBasicMaterial({
-      color: wColor, transparent: true,
-      opacity: 0.2 + Math.random() * 0.2,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    const wispMesh = new THREE.Mesh(tubeGeo, tubeMat);
-    filamentGroup.add(wispMesh);
-    disposables.push(tubeGeo, tubeMat);
-  }
-  group.add(filamentGroup);
-
-  // ── 7. Inner bright filament ring (white-hot edge around void) ──
+  // ── 6. Inner bright filament ring (white-hot edge around void) ──
   const innerRingGeo = new THREE.TorusGeometry(64, 3.5, 16, 128);
   const innerRingMat = new THREE.MeshBasicMaterial({
     color: 0xffeeaa, transparent: true, opacity: 0.7,
@@ -713,9 +955,6 @@ export function createBlackHole(scene: THREE.Scene): LevelEnvironment {
   function update(dt: number, now: number, player: Ship3D, enemies: Ship3D[]): void {
     // Advance shader time
     diskUniforms.uTime.value = now;
-
-    // Rotate filament tubes slowly
-    filamentGroup.rotation.y += dt * 0.02;
 
     // Rotate inner rings at different speeds
     innerRing.rotation.z += dt * 0.08;

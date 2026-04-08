@@ -162,7 +162,7 @@ function showTitleOverlay(): void {
   const logo = document.createElement('img');
   logo.src = '/portraits/prodigy-logo.png';
   logo.alt = 'Prodigy Promos';
-  logo.style.cssText = 'width:clamp(100px,25vw,200px);height:auto;object-fit:contain;margin-bottom:24px;filter:drop-shadow(0 0 30px rgba(0,200,255,0.2));animation:fadeIn 0.4s ease-out both;';
+  logo.style.cssText = 'width:clamp(60px,20vw,200px);height:auto;max-height:clamp(60px,15vh,200px);object-fit:contain;margin-bottom:clamp(8px,2vh,24px);filter:drop-shadow(0 0 30px rgba(0,200,255,0.2));animation:fadeIn 0.4s ease-out both;';
   panel.appendChild(logo);
 
   const title = document.createElement('div');
@@ -171,7 +171,7 @@ function showTitleOverlay(): void {
   panel.appendChild(title);
 
   const spacer = document.createElement('div');
-  spacer.style.cssText = 'margin-bottom:clamp(10px,3vh,30px);';
+  spacer.style.cssText = 'margin-bottom:clamp(4px,2vh,30px);';
   panel.appendChild(spacer);
 
   const selectLabel = document.createElement('div');
@@ -233,13 +233,14 @@ function showCharSelectOverlay(): void {
 
   const title = document.createElement('div');
   title.textContent = 'CHOOSE YOUR PILOT';
-  title.style.cssText = 'font-family:var(--font-display);font-size:clamp(16px,4vw,24px);font-weight:700;letter-spacing:4px;margin-bottom:24px;text-align:center;color:var(--text-dim);animation:fadeIn 0.5s ease-out both;';
+  title.style.cssText = 'font-family:var(--font-display);font-size:clamp(16px,4vw,24px);font-weight:700;letter-spacing:4px;margin-bottom:clamp(8px,2vh,24px);text-align:center;color:var(--text-dim);animation:fadeIn 0.5s ease-out both;';
   panel.appendChild(title);
 
   // Pull pilots from Character config
   const charEntries = Object.entries(CHARACTERS) as [CharacterName, CharacterConfig][];
 
   const grid = document.createElement('div');
+  grid.className = 'char-grid-mobile';
   grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:clamp(6px,2vw,16px);justify-content:center;max-width:min(900px,95vw);';
 
   for (const [id, cfg] of charEntries) {

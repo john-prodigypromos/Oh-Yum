@@ -33,18 +33,6 @@ export function createPlayerShipGeometry(): THREE.Group {
     }
   });
 
-  // ── PLAYER ONLY: Enlarge wingspan by 16% ──
-  // Scale X position of wing-related meshes outward
-  group.traverse((child) => {
-    if (child instanceof THREE.Mesh || child instanceof THREE.PointLight) {
-      const absX = Math.abs(child.position.x);
-      if (absX > 1.0) {
-        // This is a wing, wingtip fin, or nav light — push outward 16%
-        child.position.x *= 1.16;
-      }
-    }
-  });
-
   // ── PLAYER ONLY: Dorsal 3rd engine on top (matches twin engines) ──
   const dY = 0.35;
   // Engine housing

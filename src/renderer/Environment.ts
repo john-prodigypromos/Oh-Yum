@@ -251,72 +251,279 @@ export function createEnvironmentMap(
   return cubeRenderTarget.texture;
 }
 
-export function createPlanet(scene: THREE.Scene): THREE.Group {
+/** Planet config — defines the visual profile of each planet type. */
+interface PlanetProfile {
+  name: string;
+  radius: number;
+  color: number;          // fallback color while texture generates
+  emissive: number;
+  atmosColor: number;
+  atmosOpacity: number;
+  metalness: number;
+  roughness: number;
+  position: [number, number, number];
+  textureSeed: number;
+  textureType: 'venus' | 'ice' | 'desert' | 'ocean' | 'gas';
+}
+
+const PLANET_PROFILES: PlanetProfile[] = [
+  // 0: Venus — warm brown gas giant (original, loads real texture)
+  { name: 'venus', radius: 300, color: 0x886644, emissive: 0x221100,
+    atmosColor: 0xcc8844, atmosOpacity: 0.035, metalness: 0.05, roughness: 0.85,
+    position: [800, -300, -1200], textureSeed: 100, textureType: 'venus' },
+  // 1: Ice giant — pale blue-white with wispy cloud bands
+  { name: 'ice', radius: 260, color: 0x8899bb, emissive: 0x0a1520,
+    atmosColor: 0x6688cc, atmosOpacity: 0.05, metalness: 0.03, roughness: 0.7,
+    position: [800, -300, -1200], textureSeed: 201, textureType: 'ice' },
+  // 2: Red desert — rust-orange Mars-like with dark highlands
+  { name: 'desert', radius: 220, color: 0x994422, emissive: 0x1a0800,
+    atmosColor: 0xcc6633, atmosOpacity: 0.025, metalness: 0.08, roughness: 0.9,
+    position: [800, -300, -1200], textureSeed: 302, textureType: 'desert' },
+  // 3: Ocean world — deep blue with green-brown landmasses and white clouds
+  { name: 'ocean', radius: 280, color: 0x224488, emissive: 0x040810,
+    atmosColor: 0x88bbff, atmosOpacity: 0.045, metalness: 0.04, roughness: 0.6,
+    position: [800, -300, -1200], textureSeed: 403, textureType: 'ocean' },
+  // 4: Gas giant — banded amber/cream Jupiter-like with storm spots
+  { name: 'gas', radius: 380, color: 0xaa8855, emissive: 0x181008,
+    atmosColor: 0xddaa66, atmosOpacity: 0.04, metalness: 0.02, roughness: 0.75,
+    position: [800, -300, -1200], textureSeed: 504, textureType: 'gas' },
+];
+
+/** Procedural planet surface texture on canvas. */
+function createPlanetTexture(type: PlanetProfile['textureType'], seed: number): THREE.CanvasTexture {
+  const W = 1024, H = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  const rng = seededRng(seed);
+
+  switch (type) {
+    case 'ice': {
+      // Pale blue-white base with wispy cloud bands
+      const base = ctx.createLinearGradient(0, 0, 0, H);
+      base.addColorStop(0.0, '#b0c8e0');
+      base.addColorStop(0.2, '#9ab8d4');
+      base.addColorStop(0.4, '#c0d4e8');
+      base.addColorStop(0.5, '#88a8c8');
+      base.addColorStop(0.6, '#a8c0d8');
+      base.addColorStop(0.8, '#90b0cc');
+      base.addColorStop(1.0, '#b8d0e4');
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, W, H);
+      // Horizontal cloud bands
+      for (let i = 0; i < 30; i++) {
+        const y = rng() * H;
+        const h = 3 + rng() * 15;
+        const alpha = 0.05 + rng() * 0.1;
+        ctx.fillStyle = `rgba(200, 220, 240, ${alpha})`;
+        ctx.fillRect(0, y, W, h);
+      }
+      // Subtle swirl patches
+      for (let i = 0; i < 20; i++) {
+        const cx = rng() * W, cy = rng() * H, cr = 20 + rng() * 60;
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr);
+        g.addColorStop(0, `rgba(160, 190, 220, ${0.08 + rng() * 0.08})`);
+        g.addColorStop(1, 'rgba(160, 190, 220, 0)');
+        ctx.fillStyle = g;
+        ctx.fillRect(cx - cr, cy - cr, cr * 2, cr * 2);
+      }
+      break;
+    }
+    case 'desert': {
+      // Rust-orange base with darker highland regions
+      const base = ctx.createLinearGradient(0, 0, 0, H);
+      base.addColorStop(0.0, '#c87040');
+      base.addColorStop(0.15, '#b06030');
+      base.addColorStop(0.3, '#d08848');
+      base.addColorStop(0.5, '#a05828');
+      base.addColorStop(0.7, '#c07838');
+      base.addColorStop(0.85, '#905020');
+      base.addColorStop(1.0, '#b86838');
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, W, H);
+      // Dark highland patches
+      for (let i = 0; i < 40; i++) {
+        const cx = rng() * W, cy = rng() * H, cr = 15 + rng() * 80;
+        const g = ctx.createRadialGradient(cx, cy, cr * 0.2, cx, cy, cr);
+        g.addColorStop(0, `rgba(60, 30, 15, ${0.1 + rng() * 0.2})`);
+        g.addColorStop(0.7, `rgba(80, 40, 20, ${0.05 + rng() * 0.08})`);
+        g.addColorStop(1, 'rgba(80, 40, 20, 0)');
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.fill();
+      }
+      // Polar ice caps (white at top/bottom)
+      for (const yBase of [0, H - 30]) {
+        const capG = ctx.createLinearGradient(0, yBase, 0, yBase + (yBase === 0 ? 40 : -10));
+        capG.addColorStop(0, 'rgba(220, 210, 200, 0.4)');
+        capG.addColorStop(1, 'rgba(220, 210, 200, 0)');
+        ctx.fillStyle = capG;
+        ctx.fillRect(0, yBase === 0 ? 0 : H - 40, W, 40);
+      }
+      // Impact craters
+      for (let i = 0; i < 15; i++) {
+        const cx = rng() * W, cy = rng() * H, cr = 5 + rng() * 20;
+        ctx.strokeStyle = `rgba(60, 30, 10, ${0.15 + rng() * 0.15})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.stroke();
+      }
+      break;
+    }
+    case 'ocean': {
+      // Deep blue ocean base
+      ctx.fillStyle = '#1a3868';
+      ctx.fillRect(0, 0, W, H);
+      // Ocean color variation
+      for (let i = 0; i < 25; i++) {
+        const cx = rng() * W, cy = rng() * H, cr = 30 + rng() * 100;
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr);
+        const blue = rng() > 0.5 ? '20, 50, 90' : '15, 40, 80';
+        g.addColorStop(0, `rgba(${blue}, ${0.1 + rng() * 0.15})`);
+        g.addColorStop(1, `rgba(${blue}, 0)`);
+        ctx.fillStyle = g;
+        ctx.fillRect(cx - cr, cy - cr, cr * 2, cr * 2);
+      }
+      // Continents — green-brown landmasses
+      for (let i = 0; i < 8; i++) {
+        const cx = rng() * W, cy = H * 0.15 + rng() * H * 0.7;
+        ctx.fillStyle = `rgba(${60 + Math.floor(rng() * 40)}, ${70 + Math.floor(rng() * 30)}, ${30 + Math.floor(rng() * 20)}, ${0.5 + rng() * 0.4})`;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        for (let j = 0; j < 8; j++) {
+          ctx.quadraticCurveTo(
+            cx + (rng() - 0.5) * 180, cy + (rng() - 0.5) * 120,
+            cx + (rng() - 0.5) * 160, cy + (rng() - 0.5) * 100,
+          );
+        }
+        ctx.closePath(); ctx.fill();
+      }
+      // White cloud wisps
+      for (let i = 0; i < 35; i++) {
+        const cx = rng() * W, cy = rng() * H;
+        const cw = 30 + rng() * 120, ch = 5 + rng() * 15;
+        ctx.fillStyle = `rgba(240, 245, 255, ${0.08 + rng() * 0.12})`;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, cw, ch, rng() * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Polar ice
+      for (const yBase of [0, H - 25]) {
+        const capG = ctx.createLinearGradient(0, yBase, 0, yBase + (yBase === 0 ? 30 : -5));
+        capG.addColorStop(0, 'rgba(230, 240, 255, 0.5)');
+        capG.addColorStop(1, 'rgba(230, 240, 255, 0)');
+        ctx.fillStyle = capG;
+        ctx.fillRect(0, yBase === 0 ? 0 : H - 30, W, 30);
+      }
+      break;
+    }
+    case 'gas': {
+      // Banded amber/cream Jupiter-like
+      const bands = [
+        '#c8a060', '#b89050', '#d8b878', '#a08040', '#c09858',
+        '#dcc088', '#b08848', '#c8a868', '#a88848', '#d0b070',
+        '#b89858', '#c8a060', '#a07838', '#c0a068',
+      ];
+      const bandH = H / bands.length;
+      for (let i = 0; i < bands.length; i++) {
+        ctx.fillStyle = bands[i];
+        ctx.fillRect(0, i * bandH, W, bandH + 1);
+      }
+      // Turbulent band edges
+      for (let i = 0; i < 50; i++) {
+        const y = rng() * H;
+        const x = rng() * W;
+        const w = 40 + rng() * 150;
+        const h = 3 + rng() * 8;
+        const alpha = 0.06 + rng() * 0.1;
+        const bright = rng() > 0.5;
+        ctx.fillStyle = bright
+          ? `rgba(220, 190, 140, ${alpha})`
+          : `rgba(120, 80, 40, ${alpha})`;
+        ctx.fillRect(x, y, w, h);
+      }
+      // Great storm spots
+      for (let i = 0; i < 3; i++) {
+        const cx = rng() * W, cy = H * 0.2 + rng() * H * 0.6;
+        const rx = 15 + rng() * 40, ry = 10 + rng() * 20;
+        const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, rx);
+        const stormColor = rng() > 0.5 ? '180, 80, 40' : '200, 160, 100';
+        g.addColorStop(0, `rgba(${stormColor}, 0.5)`);
+        g.addColorStop(0.5, `rgba(${stormColor}, 0.2)`);
+        g.addColorStop(1, `rgba(${stormColor}, 0)`);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      break;
+    }
+    default: // venus — not used (loads real texture), but provide fallback
+      ctx.fillStyle = '#886644';
+      ctx.fillRect(0, 0, W, H);
+      break;
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  tex.needsUpdate = true;
+  return tex;
+}
+
+/** Create a planet from a profile index (0-4). Exported for viewer use. */
+export function createPlanet(scene: THREE.Scene, profileIndex = 0): THREE.Group {
+  const prof = PLANET_PROFILES[profileIndex % PLANET_PROFILES.length];
   const group = new THREE.Group();
 
-  // ── Planet — clean real texture, no procedural overlay ──
-  const planetGeo = new THREE.SphereGeometry(300, 128, 96);
+  const planetGeo = new THREE.SphereGeometry(prof.radius, 128, 96);
   const planetMat = new THREE.MeshStandardMaterial({
-    color: 0x886644, // warm fallback while texture loads
-    metalness: 0.05,
-    roughness: 0.85,
-    emissive: 0x221100,
+    color: prof.color,
+    metalness: prof.metalness,
+    roughness: prof.roughness,
+    emissive: prof.emissive,
     emissiveIntensity: 0.3,
   });
 
-  // Load 8K Venus surface — the real texture does all the work
-  const loader = new THREE.TextureLoader();
-  loader.load('/textures/venus_surface.jpg', (tex) => {
-    tex.colorSpace = THREE.SRGBColorSpace;
-    tex.anisotropy = 8;
+  if (prof.textureType === 'venus') {
+    // Venus loads a real texture file
+    const loader = new THREE.TextureLoader();
+    loader.load('/textures/venus_surface.jpg', (tex) => {
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.anisotropy = 8;
+      planetMat.map = tex;
+      planetMat.emissive.set(0x000000);
+      planetMat.emissiveIntensity = 0;
+      planetMat.needsUpdate = true;
+    });
+  } else {
+    // Procedural canvas texture
+    const tex = createPlanetTexture(prof.textureType, prof.textureSeed);
     planetMat.map = tex;
-    planetMat.emissive.set(0x000000); // disable emissive once real texture loads
+    planetMat.emissive.set(0x000000);
     planetMat.emissiveIntensity = 0;
-    planetMat.needsUpdate = true;
-  });
+  }
 
   const planet = new THREE.Mesh(planetGeo, planetMat);
   group.add(planet);
 
-  // ── Atmosphere — subtle warm haze, not fiery ──
-  const atmos1Geo = new THREE.SphereGeometry(308, 64, 48);
+  // Atmosphere
+  const atmos1Geo = new THREE.SphereGeometry(prof.radius * 1.027, 64, 48);
   const atmos1Mat = new THREE.MeshBasicMaterial({
-    color: 0xcc8844,
+    color: prof.atmosColor,
     transparent: true,
-    opacity: 0.035,
+    opacity: prof.atmosOpacity,
     side: THREE.BackSide,
   });
   group.add(new THREE.Mesh(atmos1Geo, atmos1Mat));
 
-  // Outer haze
-  const atmos2Geo = new THREE.SphereGeometry(318, 48, 36);
-  const atmos2Mat = new THREE.MeshBasicMaterial({
-    color: 0x886644,
-    transparent: true,
-    opacity: 0.02,
-    side: THREE.BackSide,
-  });
-  group.add(new THREE.Mesh(atmos2Geo, atmos2Mat));
-
-  // ── Terminator shadow (dark side) ──
-  const shadowGeo = new THREE.SphereGeometry(302, 48, 36);
-  const shadowMat = new THREE.MeshBasicMaterial({
-    color: 0x000000,
-    transparent: true,
-    opacity: 0.55,
-    side: THREE.FrontSide,
-  });
-  const shadow = new THREE.Mesh(shadowGeo, shadowMat);
-  shadow.position.set(-80, 0, 0);
-  group.add(shadow);
-
-  // Position planet
-  group.position.set(800, -300, -1200);
+  // Position
+  group.position.set(...prof.position);
   group.rotation.y = 0.3;
 
   scene.add(group);
   return group;
 }
+
+/** How many planet types are available. */
+export const PLANET_COUNT = PLANET_PROFILES.length;
 
 /** Ice moon — smaller, blue-white with detailed craters and fracture lines */
 export function createMoon(scene: THREE.Scene): THREE.Group {
@@ -389,16 +596,6 @@ export function createMoon(scene: THREE.Scene): THREE.Group {
   });
   group.add(new THREE.Mesh(moonGeo, moonMat));
 
-  // Thin atmosphere
-  const atmosGeo = new THREE.SphereGeometry(63, 32, 24);
-  const atmosMat = new THREE.MeshBasicMaterial({
-    color: 0x88bbdd,
-    transparent: true,
-    opacity: 0.04,
-    side: THREE.BackSide,
-  });
-  group.add(new THREE.Mesh(atmosGeo, atmosMat));
-
   // Position near the gas giant but offset
   group.position.set(-600, 200, -900);
 
@@ -427,7 +624,8 @@ export function createSpaceEnvironment(
   const stars = createStarfield(scene);
   const nebulae = createNebulae(scene);
   const { sun, hemisphere } = createLighting(scene);
-  const planet = createPlanet(scene);
+  const planetIndex = Math.floor(Math.random() * PLANET_COUNT);
+  const planet = createPlanet(scene, planetIndex);
   const moon = createMoon(scene);
 
   // Generate environment map for PBR reflections
