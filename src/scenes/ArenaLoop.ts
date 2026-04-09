@@ -23,6 +23,7 @@ import { MouseControls } from '../ui/MouseControls';
 import { SoundSystem } from '../systems/SoundSystem';
 import { SHIP, AI, PHYSICS } from '../config';
 import { getCurrentLevel, type LevelConfig } from '../state/LevelState';
+import { getInvertY } from '../state/Settings';
 import { DIFFICULTY, currentDifficulty } from '../state/Difficulty';
 import { ParticleSystem3D } from '../systems/ParticleSystem3D';
 import { createLevelEnvironment, type LevelEnvironment } from '../systems/EnvironmentLoader';
@@ -271,8 +272,9 @@ export function updateArena(
   // Yaw: ArrowLeft / ArrowRight on desktop, touch joystick X on mobile
   const keyYaw = (keys['ArrowRight'] ? 1 : 0) + (keys['ArrowLeft'] ? -1 : 0);
 
-  // Pitch: ArrowUp = nose DOWN, ArrowDown = nose UP (inverted Y-axis, flight-sim style)
-  const keyPitch = (keys['ArrowUp'] ? -1 : 0) + (keys['ArrowDown'] ? 1 : 0);
+  // Pitch: default = push up → nose up; inverted = push up → nose down (flight-sim)
+  const rawKeyPitch = (keys['ArrowUp'] ? -1 : 0) + (keys['ArrowDown'] ? 1 : 0);
+  const keyPitch = getInvertY() ? rawKeyPitch : -rawKeyPitch;
   const touchPitch = touch.pitch;
 
   // Thrust: E=forward, D=reverse on desktop, touch buttons on mobile

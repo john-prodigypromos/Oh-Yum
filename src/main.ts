@@ -17,8 +17,10 @@ import { SoundSystem } from './systems/SoundSystem';
 import { getSpawnTaunt, getWinTaunt } from './config/VillainTaunts';
 import { createCinematic, updateCinematic, cleanupCinematic, type CinematicState } from './scenes/TakeoffCinematic';
 import { createMarsLaunch, updateMarsLaunch, cleanupMarsLaunch, type MarsLaunchState } from './scenes/MarsLaunch';
-import { createEarthLanding, updateEarthLanding, isLandingComplete, cleanupEarthLanding, type EarthLandingState } from './scenes/EarthLanding';
+import { createMarsLanding, updateMarsLanding, isMarsLandingComplete, cleanupMarsLanding, type MarsLandingState } from './scenes/MarsLanding';
 import { setMissionPhase } from './state/LevelState';
+import { setInvertYGetter } from './ui/TouchControls3D';
+import { getInvertY, setInvertY } from './state/Settings';
 
 // ── Globals ──
 let bundle: RendererBundle;
@@ -28,7 +30,7 @@ let arena: ArenaState | null = null;
 let hud: HUD3D | null = null;
 let cinematic: CinematicState | null = null;
 let marsLaunch: MarsLaunchState | null = null;
-let earthLanding: EarthLandingState | null = null;
+let marsLanding: MarsLandingState | null = null;
 let spaceEnv: SpaceEnvironment;
 let globalSound: import('./systems/SoundSystem').SoundSystem | null = null;
 const keys: Record<string, boolean> = {};
@@ -44,6 +46,9 @@ function init() {
 
   overlayEl = document.getElementById('ui-overlay') as HTMLDivElement;
   crosshairEl = document.getElementById('crosshair') as HTMLElement;
+
+  // Wire Y-axis invert preference into touch controls
+  setInvertYGetter(getInvertY);
 
   // ── Renderer + environment ──
   bundle = createRenderer(canvas);
@@ -114,8 +119,8 @@ function handleSceneEnter(state: SceneState, _prev: SceneState | null): void {
     case 'marsLaunch':
       startMarsLaunch();
       break;
-    case 'earthLanding':
-      startEarthLanding();
+    case 'marsLanding':
+      startMarsLanding();
       break;
     case 'arena':
       startArena();
@@ -147,9 +152,9 @@ function handleSceneExit(state: SceneState, _next: SceneState): void {
     cleanupMarsLaunch(marsLaunch, bundle.scene);
     marsLaunch = null;
   }
-  if (state === 'earthLanding' && earthLanding) {
-    cleanupEarthLanding(earthLanding, bundle.scene);
-    earthLanding = null;
+  if (state === 'marsLanding' && marsLanding) {
+    cleanupMarsLanding(marsLanding, bundle.scene);
+    marsLanding = null;
   }
 }
 
@@ -260,14 +265,15 @@ function showCharSelectOverlay(): void {
 
   const grid = document.createElement('div');
   grid.className = 'char-grid-mobile';
-  grid.style.cssText = 'display:flex;flex-wrap:wrap;gap:clamp(6px,2vw,16px);justify-content:center;max-width:min(900px,95vw);';
+  grid.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(6px,2vw,16px);justify-items:center;max-width:min(900px,95vw);width:95vw;';
 
   for (const [id, cfg] of charEntries) {
     const hex = '#' + cfg.color.toString(16).padStart(6, '0');
     const card = document.createElement('button');
     card.className = 'char-card';
     card.style.borderColor = hex;
-    card.style.width = 'min(210px, clamp(80px, 22vw, 210px))';
+    card.style.width = '100%';
+    card.style.maxWidth = '210px';
     card.style.padding = 'clamp(6px, 1.5vw, 14px) clamp(4px, 1vw, 12px)';
 
     // Portrait wrapper — fixed-size circle that clips the image inside
@@ -413,6 +419,48 @@ function togglePause(): void {
     hint.style.cssText = 'font-size:15px;color:var(--text-dim);letter-spacing:2px;margin-bottom:32px;';
     pauseOverlay.appendChild(hint);
 
+    // ── Y-Axis control preference ──
+    const yAxisRow = document.createElement('div');
+    yAxisRow.style.cssText = 'display:flex;align-items:center;gap:16px;margin-bottom:28px;';
+
+    const yLabel = document.createElement('div');
+    yLabel.style.cssText = 'font-family:var(--font-display);font-size:14px;color:var(--text-dim);letter-spacing:2px;';
+    yLabel.textContent = 'Y-AXIS:';
+    yAxisRow.appendChild(yLabel);
+
+    const yStandard = document.createElement('button');
+    const yInverted = document.createElement('button');
+    const btnBase = 'font-family:var(--font-display);font-size:13px;letter-spacing:2px;padding:8px 18px;border:2px solid;border-radius:6px;background:transparent;cursor:pointer;transition:all 0.2s;';
+
+    function updateYButtons() {
+      if (getInvertY()) {
+        yStandard.style.cssText = btnBase + 'border-color:var(--text-dim);color:var(--text-dim);opacity:0.5;';
+        yInverted.style.cssText = btnBase + 'border-color:var(--cyan);color:var(--cyan);opacity:1;box-shadow:0 0 10px var(--cyan-glow);';
+      } else {
+        yStandard.style.cssText = btnBase + 'border-color:var(--cyan);color:var(--cyan);opacity:1;box-shadow:0 0 10px var(--cyan-glow);';
+        yInverted.style.cssText = btnBase + 'border-color:var(--text-dim);color:var(--text-dim);opacity:0.5;';
+      }
+    }
+
+    yStandard.textContent = 'STANDARD';
+    yStandard.title = 'Push up = nose up';
+    yStandard.addEventListener('click', () => { setInvertY(false); updateYButtons(); });
+    yAxisRow.appendChild(yStandard);
+
+    yInverted.textContent = 'INVERTED';
+    yInverted.title = 'Push up = nose down (flight sim)';
+    yInverted.addEventListener('click', () => { setInvertY(true); updateYButtons(); });
+    yAxisRow.appendChild(yInverted);
+
+    updateYButtons();
+    pauseOverlay.appendChild(yAxisRow);
+
+    // ── Descriptions ──
+    const yDesc = document.createElement('div');
+    yDesc.style.cssText = 'font-size:11px;color:var(--text-dim);letter-spacing:1px;margin-top:-20px;margin-bottom:24px;opacity:0.7;';
+    yDesc.textContent = 'STANDARD: push up → aim up  ·  INVERTED: push up → aim down';
+    pauseOverlay.appendChild(yDesc);
+
     const quitBtn = document.createElement('button');
     quitBtn.textContent = 'QUIT TO TITLE';
     quitBtn.className = 'overlay-btn';
@@ -451,10 +499,10 @@ function startMarsLaunch(): void {
   marsLaunch = createMarsLaunch(bundle.scene, bundle.camera);
 }
 
-function startEarthLanding(): void {
+function startMarsLanding(): void {
   crosshairEl.style.display = 'block';
   setMissionPhase('landing');
-  earthLanding = createEarthLanding(bundle.scene, bundle.camera, totalScore);
+  marsLanding = createMarsLanding(bundle.scene, bundle.camera);
 }
 
 function startArena(): void {
@@ -657,7 +705,7 @@ function animate() {
       if (hasNext) {
         sceneManager.transition('levelIntro');
       } else {
-        sceneManager.transition('earthLanding');
+        sceneManager.transition('marsLanding');
       }
     } else if (arena.gameOver && now - arena.gameOverTime > TRANSITION_DELAY) {
       sceneManager.transition('gameOver');
@@ -672,9 +720,9 @@ function animate() {
     if (marsLaunch.orbitReached && now - marsLaunch.orbitTimer > 2000) {
       sceneManager.transition('levelIntro');
     }
-  } else if (sceneManager.current === 'earthLanding' && earthLanding) {
-    updateEarthLanding(earthLanding, keys, dt, now, bundle.scene);
-    if (isLandingComplete(earthLanding)) {
+  } else if (sceneManager.current === 'marsLanding' && marsLanding) {
+    updateMarsLanding(marsLanding, keys, dt, now, bundle.scene);
+    if (isMarsLandingComplete(marsLanding)) {
       sceneManager.transition('highScore');
     }
   } else if (sceneManager.current === 'title') {

@@ -10,6 +10,7 @@ import { TouchControls3D } from '../ui/TouchControls3D';
 import { MouseControls } from '../ui/MouseControls';
 import { SoundSystem } from '../systems/SoundSystem';
 import { HUD3D } from '../ui/HUD3D';
+import { NavBeacon } from '../ui/NavBeacon';
 import { createCanyonTerrain, type CanyonTerrain } from '../terrain/CanyonGeometry';
 import {
   MARS_ATMOSPHERE,
@@ -22,6 +23,7 @@ import { createPlayerMaterials, applyMaterials } from '../ships/ShipMaterials';
 import { currentCharacter, CHARACTERS } from '../state/Character';
 import { DIFFICULTY, currentDifficulty } from '../state/Difficulty';
 import { COLORS, SHIP } from '../config';
+import { getInvertY } from '../state/Settings';
 
 // ── State Interface ───────────────────────────────────────
 
@@ -33,6 +35,7 @@ export interface MarsLaunchState {
   sound: SoundSystem;
   hud: HUD3D;
   canyon: CanyonTerrain;
+  nav: NavBeacon;
   camera: THREE.PerspectiveCamera;
   dustParticles: THREE.Points;
   altitude: number;
@@ -117,6 +120,10 @@ export function createMarsLaunch(
   const hud = new HUD3D();
   hud.setMissionPhase('launch');
 
+  // ── Nav beacon — points to orbit (straight up from pad) ──
+  const nav = new NavBeacon('ORBIT');
+  nav.setTarget(new THREE.Vector3(0, MARS_ATMOSPHERE.maxAltitude, -8000));
+
   // ── Launch prompt DOM element ──
   const promptEl = document.createElement('div');
   promptEl.textContent = 'HOLD THRUST TO LAUNCH';
@@ -164,6 +171,7 @@ export function createMarsLaunch(
     mouseControls,
     sound,
     hud,
+    nav,
     canyon,
     camera,
     dustParticles,
@@ -192,7 +200,8 @@ export function updateMarsLaunch(
   const touch = touchControls.getInput();
 
   const keyYaw   = (keys['ArrowRight'] ? 1 : 0) + (keys['ArrowLeft']  ? -1 : 0);
-  const keyPitch = (keys['ArrowUp']    ? -1 : 0) + (keys['ArrowDown'] ?  1 : 0);
+  const rawKeyPitch = (keys['ArrowUp'] ? -1 : 0) + (keys['ArrowDown'] ? 1 : 0);
+  const keyPitch = getInvertY() ? rawKeyPitch : -rawKeyPitch;
   const keyThrust = (keys['KeyE'] ? 1 : 0) + (keys['KeyD'] ? -1 : 0);
 
   const combinedThrust = Math.max(-1, Math.min(1, keyThrust + touch.thrust));
@@ -272,6 +281,9 @@ export function updateMarsLaunch(
   const windT = state.altitude / MARS_ATMOSPHERE.maxAltitude;
   sound.setWindIntensity(Math.min(1, windT));
 
+  // ── Nav beacon ──
+  state.nav.update(state.camera, player.position);
+
   // ── Touch controls ──
   touchControls.draw();
 
@@ -311,6 +323,7 @@ export function cleanupMarsLaunch(
   // UI cleanup
   state.touchControls.destroy();
   state.hud.destroy();
+  state.nav.destroy();
 
   // Remove prompt if still in DOM
   if (state.promptEl && state.promptEl.parentNode) {

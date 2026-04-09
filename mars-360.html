@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Mars Canyon Takeoff — 360° View</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #1a0800; }
+    canvas { display: block; }
+    #info {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+      font-size: 15px;
+      color: #00ffff;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      text-shadow: 0 0 12px rgba(0,255,255,0.5);
+      pointer-events: none;
+      z-index: 10;
+      opacity: 0.85;
+    }
+    #controls-hint {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: 'Rajdhani', 'Segoe UI', sans-serif;
+      font-size: 12px;
+      color: rgba(255,200,150,0.6);
+      letter-spacing: 2px;
+      pointer-events: none;
+      z-index: 10;
+    }
+  </style>
+</head>
+<body>
+  <div id="info">MARS CANYON — LAUNCH PAD ALPHA</div>
+  <div id="controls-hint">DRAG TO ORBIT · SCROLL TO ZOOM · RIGHT-DRAG TO PAN</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // ── Noise functions (matching the game's EnvironmentLoader) ──────────
+
+    function _hash3(x, y, z) {
+      let n = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453;
+      return n - Math.floor(n);
+    }
+    function _fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+    function _lerp(a, b, t) { return a + (b - a) * t; }
+
+    function valueNoise3D(x, y, z) {
+      const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+      const fx = _fade(x - ix), fy = _fade(y - iy), fz = _fade(z - iz);
+      const n000 = _hash3(ix, iy, iz), n100 = _hash3(ix+1, iy, iz);
+      const n010 = _hash3(ix, iy+1, iz), n110 = _hash3(ix+1, iy+1, iz);
+      const n001 = _hash3(ix, iy, iz+1), n101 = _hash3(ix+1, iy, iz+1);
+      const n011 = _hash3(ix, iy+1, iz+1), n111 = _hash3(ix+1, iy+1, iz+1);
+      return _lerp(
+        _lerp(_lerp(n000, n100, fx), _lerp(n010, n110, fx), fy),
+        _lerp(_lerp(n001, n101, fx), _lerp(n011, n111, fx), fy), fz
+      ) * 2 - 1;
+    }
+
+    function fbm3D(x, y, z, octaves, lac = 2.0, gain = 0.5) {
+      let val = 0, amp = 1, freq = 1, norm = 0;
+      for (let o = 0; o < octaves; o++) {
+        val += amp * valueNoise3D(x * freq, y * freq, z * freq);
+        norm += amp; amp *= gain; freq *= lac;
+      }
+      return val / norm;
+    }
+
+    function ridgedNoise3D(x, y, z, octaves) {
+      let val = 0, amp = 1, freq = 1, norm = 0, prev = 1;
+      for (let o = 0; o < octaves; o++) {
+        let n = Math.abs(valueNoise3D(x * freq, y * freq, z * freq));
+        n = 1 - n; n = n * n; n *= prev; prev = n;
+        val += amp * n; norm += amp; amp *= 0.5; freq *= 2.1;
+      }
+      return val / norm * 2 - 1;
+    }
+
+    // ── Rock normal map ──────────────────────────────────────────────────
+
+    function createRockNormalMap(size, seed) {
+      const c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+      const img = ctx.createImageData(size, size);
+      const d = img.data;
+      for (let py = 0; py < size; py++) {
+        for (let px = 0; px < size; px++) {
+          const idx = (py * size + px) * 4;
+          const u = px / size, v = py / size;
+          const eps = 1.0 / size;
+          const h = (s, t) => {
+            return valueNoise3D(s*15+seed, t*15, seed*0.3)*0.5
+              + valueNoise3D(s*60+seed*2, t*60, seed*0.7)*0.2
+              + valueNoise3D(s*120+seed*3, t*120, seed)*0.1;
+          };
+          const hL = h(u-eps, v), hR = h(u+eps, v);
+          const hD = h(u, v-eps), hU = h(u, v+eps);
+          let nx = (hL - hR) * 4.0, ny = (hD - hU) * 4.0, nz = 1.0;
+          const len = Math.sqrt(nx*nx + ny*ny + nz*nz);
+          nx /= len; ny /= len; nz /= len;
+          d[idx]   = Math.round((nx*0.5+0.5)*255);
+          d[idx+1] = Math.round((ny*0.5+0.5)*255);
+          d[idx+2] = Math.round((nz*0.5+0.5)*255);
+          d[idx+3] = 255;
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = THREE.RepeatWrapping;
+      tex.wrapT = THREE.RepeatWrapping;
+      return tex;
+    }
+
+    const rockNormalMap = createRockNormalMap(512, 77);
+
+    // ── Scene setup ──────────────────────────────────────────────────────
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.1;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xcc2200);
+    scene.fog = new THREE.FogExp2(0xcc2200, 0.00015);
+
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 50000);
+    camera.position.set(0, 300, -9500);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 200, -9950);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.maxDistance = 6000;
+    controls.minDistance = 10;
+    controls.maxPolarAngle = Math.PI * 0.48; // prevent camera going below ground
+    controls.update();
+
+    // ── Lighting (Mars) ──────────────────────────────────────────────────
+
+    const sun = new THREE.DirectionalLight(0xff9966, 2.5);
+    sun.position.set(3000, 4000, -5000);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.near = 1;
+    sun.shadow.camera.far = 20000;
+    sun.shadow.camera.left = -2000;
+    sun.shadow.camera.right = 2000;
+    sun.shadow.camera.top = 2000;
+    sun.shadow.camera.bottom = -2000;
+    scene.add(sun);
+
+    const ambient = new THREE.AmbientLight(0xcc4422, 0.4);
+    scene.add(ambient);
+
+    // Dim red-orange hemisphere light for Mars sky fill
+    const hemiLight = new THREE.HemisphereLight(0xcc4400, 0x331100, 0.3);
+    scene.add(hemiLight);
+
+    // ── Canyon Config (matching the game) ────────────────────────────────
+
+    const CONFIG = { length: 20000, baseWidth: 120, topWidth: 300, wallHeight: 1500 };
+    const SEED = 42;
+
+    // ── Canyon Walls ─────────────────────────────────────────────────────
+
+    function buildWall(side) {
+      const { length, baseWidth, topWidth, wallHeight } = CONFIG;
+      const segW = 60, segH = 30;
+      const geo = new THREE.PlaneGeometry(length, wallHeight, segW, segH);
+      geo.rotateY(side === -1 ? Math.PI / 2 : -Math.PI / 2);
+
+      const pos = geo.attributes.position;
+      const count = pos.count;
+      const colors = new Float32Array(count * 3);
+      const seed = side === -1 ? SEED : SEED + 1337;
+
+      for (let i = 0; i < count; i++) {
+        const rawX = pos.getX(i), rawY = pos.getY(i), rawZ = pos.getZ(i);
+        const tY = (rawY + wallHeight * 0.5) / wallHeight;
+        const tZ = rawZ / (length * 0.5);
+        const halfW = THREE.MathUtils.lerp(baseWidth, topWidth, tY);
+        const wallX = side * halfW;
+
+        const ns = 0.003;
+        const nx = tY * 2.0, ny = (rawZ + seed * 100) * ns, nz = seed * 0.5 + tY;
+
+        const lumps = fbm3D(nx * 0.8, ny * 0.8, nz, 5) * 30;
+        const crags = ridgedNoise3D(nx * 1.5 + 3.1, ny * 1.5 + seed * 0.3, nz + 1.7, 4) * 12;
+        const detail = valueNoise3D(nx * 6 + seed, ny * 6, nz * 2) * 4;
+        const overhangFactor = Math.max(0, tY - 0.65) / 0.35;
+        const overhang = ridgedNoise3D(nx * 2 + 7.3, ny * 2, nz + 3.1, 3) * 20 * overhangFactor;
+        const totalDisp = lumps + crags + detail + overhang;
+
+        pos.setX(i, wallX + side * totalDisp);
+        pos.setY(i, rawY);
+        pos.setZ(i, rawZ);
+
+        // Vertex colour
+        const stripe = Math.sin(tY * 22 + fbm3D(tZ * 2, tY * 3, seed, 3) * 3.0);
+        const bandMix = stripe * 0.5 + 0.5;
+        let r = 0.48 + bandMix * 0.10;
+        let g = 0.34 + bandMix * 0.06;
+        let b = 0.22 + bandMix * 0.03;
+        const ironBand = Math.pow(Math.max(0, Math.sin(tY * 11 + seed * 3.7) * 0.5 + 0.5 - 0.6) / 0.4, 2);
+        r += ironBand * 0.08; g -= ironBand * 0.10; b -= ironBand * 0.08;
+        const grimeFactor = Math.max(0, -totalDisp / 30) * 0.15;
+        r -= grimeFactor; g -= grimeFactor; b -= grimeFactor * 0.8;
+        const dustTop = tY * tY * 0.12;
+        r += dustTop; g += dustTop * 0.8; b += dustTop * 0.6;
+        const noiseColor = valueNoise3D(nx * 4, ny * 4, nz) * 0.06;
+        r += noiseColor; g += noiseColor * 0.7; b += noiseColor * 0.4;
+
+        colors[i * 3] = Math.min(1, Math.max(0, r));
+        colors[i * 3 + 1] = Math.min(1, Math.max(0, g));
+        colors[i * 3 + 2] = Math.min(1, Math.max(0, b));
+      }
+
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.computeVertexNormals();
+
+      const mat = new THREE.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.92, metalness: 0.04,
+        side: THREE.DoubleSide, flatShading: true,
+        normalMap: rockNormalMap, normalScale: new THREE.Vector2(0.8, 0.8),
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(side * baseWidth, wallHeight * 0.5, 0);
+      return mesh;
+    }
+
+    scene.add(buildWall(-1));
+    scene.add(buildWall(1));
+
+    // ── Canyon End Walls (cap the open ends) ─────────────────────────────
+
+    function buildEndWall(zPos, facingSign) {
+      const { baseWidth, topWidth, wallHeight } = CONFIG;
+      const width = topWidth * 2.5;
+      const segW = 30, segH = 20;
+      const geo = new THREE.PlaneGeometry(width, wallHeight, segW, segH);
+      // Face along Z axis
+      if (facingSign > 0) geo.rotateY(Math.PI);
+
+      const pos = geo.attributes.position;
+      const count = pos.count;
+      const colors = new Float32Array(count * 3);
+      const seed = SEED + zPos * 0.001;
+
+      for (let i = 0; i < count; i++) {
+        const rawX = pos.getX(i), rawY = pos.getY(i), rawZ = pos.getZ(i);
+        const tY = (rawY + wallHeight * 0.5) / wallHeight;
+        const tX = rawX / (width * 0.5);
+
+        const ns = 0.003;
+        const nx = tX * 2.0, ny = tY * 2.0, nz = seed * 0.5;
+
+        const lumps = fbm3D(nx * 0.8 + seed, ny * 0.8, nz, 5) * 25;
+        const crags = ridgedNoise3D(nx * 1.5 + 3.1, ny * 1.5 + seed * 0.3, nz + 1.7, 4) * 10;
+        const detail = valueNoise3D(nx * 6 + seed, ny * 6, nz * 2) * 3;
+        const totalDisp = lumps + crags + detail;
+
+        pos.setZ(i, rawZ + facingSign * totalDisp);
+
+        // Vertex colour — same palette as side walls
+        const stripe = Math.sin(tY * 22 + fbm3D(tX * 2, tY * 3, seed, 3) * 3.0);
+        const bandMix = stripe * 0.5 + 0.5;
+        let r = 0.48 + bandMix * 0.10;
+        let g = 0.34 + bandMix * 0.06;
+        let b = 0.22 + bandMix * 0.03;
+        const ironBand = Math.pow(Math.max(0, Math.sin(tY * 11 + seed * 3.7) * 0.5 + 0.5 - 0.6) / 0.4, 2);
+        r += ironBand * 0.08; g -= ironBand * 0.10; b -= ironBand * 0.08;
+        const dustTop = tY * tY * 0.12;
+        r += dustTop; g += dustTop * 0.8; b += dustTop * 0.6;
+        const noiseColor = valueNoise3D(nx * 4, ny * 4, nz) * 0.06;
+        r += noiseColor; g += noiseColor * 0.7; b += noiseColor * 0.4;
+
+        colors[i * 3] = Math.min(1, Math.max(0, r));
+        colors[i * 3 + 1] = Math.min(1, Math.max(0, g));
+        colors[i * 3 + 2] = Math.min(1, Math.max(0, b));
+      }
+
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.computeVertexNormals();
+
+      const mat = new THREE.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.92, metalness: 0.04,
+        side: THREE.DoubleSide, flatShading: true,
+        normalMap: rockNormalMap, normalScale: new THREE.Vector2(0.8, 0.8),
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(0, wallHeight * 0.5, zPos);
+      return mesh;
+    }
+
+    const halfLen = CONFIG.length / 2;
+    // Far end wall — has cave opening carved into it
+    // (built custom below instead of buildEndWall)
+    scene.add(buildEndWall(halfLen, 1));   // near end only
+
+    // ── Cavernous Cave at back of canyon ────────────────────────────────
+    // Back end wall stays solid. Cave is a huge box-like cavern placed
+    // in front of it with its own walls, ceiling, and floor at y=0.
+
+    {
+      const END_Z = -halfLen; // -10000
+      const CAVE_D = 600;    // depth into rock
+      const CAVE_W = 500;    // full width
+      const CAVE_H = 800;    // height — needs to be big relative to 1500-unit canyon walls
+      const CZ = END_Z + 50; // cave entrance 50 units in front of where wall ends up
+
+      // No end wall — cave walls seal the back of the canyon
+
+      const caveGroup = new THREE.Group();
+
+      // ── Rock arch over entrance — natural cave look ──
+      const archGeo = new THREE.TorusGeometry(CAVE_W / 2 + 20, 40, 10, 24, Math.PI);
+      archGeo.rotateZ(Math.PI);  // open side down
+      archGeo.rotateX(Math.PI / 2); // lay flat facing player
+      // Displace for rocky look
+      const archPos = archGeo.attributes.position;
+      for (let i = 0; i < archPos.count; i++) {
+        const x = archPos.getX(i), y = archPos.getY(i), z = archPos.getZ(i);
+        const d = fbm3D(x * 0.02 + 88, y * 0.02, z * 0.02 + 88, 4) * 15;
+        const len = Math.sqrt(x*x + y*y + z*z) || 1;
+        archPos.setXYZ(i, x + (x/len)*d, y + (y/len)*d, z + (z/len)*d);
+      }
+      archGeo.computeVertexNormals();
+      const archMat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0.48, 0.30, 0.18),
+        roughness: 0.92, metalness: 0.04, flatShading: true,
+        normalMap: rockNormalMap, normalScale: new THREE.Vector2(0.8, 0.8),
+      });
+      const arch = new THREE.Mesh(archGeo, archMat);
+      arch.position.set(0, CAVE_H * 0.5, CZ + 10);
+      caveGroup.add(arch);
+
+      // Warm entrance light
+      const warmInside = new THREE.PointLight(0xffaa55, 15, 400);
+      warmInside.position.set(0, CAVE_H * 0.3, CZ - 50);
+      caveGroup.add(warmInside);
+
+      // ── Cave rock surfaces — vertex-colored like canyon walls ──
+      const caveRockMat = new THREE.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.92, metalness: 0.04,
+        side: THREE.DoubleSide, flatShading: true,
+        normalMap: rockNormalMap, normalScale: new THREE.Vector2(0.8, 0.8),
+      });
+
+      // Helper: apply canyon-style vertex colors + noise displacement to a plane
+      function makeRockSurface(geo, seed, darkMult = 0.65) {
+        const pos = geo.attributes.position;
+        const count = pos.count;
+        const colors = new Float32Array(count * 3);
+        for (let i = 0; i < count; i++) {
+          const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+          // Noise displacement along local normal (Z for plane)
+          const ns = 0.008;
+          const disp = fbm3D(x * ns + seed, y * ns, z * ns + seed, 5) * 12
+            + ridgedNoise3D(x * ns * 2 + seed, y * ns * 2, z * ns + seed, 3) * 5;
+          pos.setZ(i, pos.getZ(i) + disp);
+          // Vertex colour — darker canyon sandstone
+          const tY = (y + 400) / 800; // rough normalize
+          const stripe = Math.sin(tY * 18 + fbm3D(x * 0.005, tY * 3, seed, 3) * 2.5);
+          const band = stripe * 0.5 + 0.5;
+          let r = (0.48 + band * 0.08) * darkMult;
+          let g = (0.34 + band * 0.05) * darkMult;
+          let b = (0.22 + band * 0.03) * darkMult;
+          const iron = Math.pow(Math.max(0, Math.sin(tY * 11 + seed * 3.7) * 0.5 + 0.5 - 0.6) / 0.4, 2);
+          r += iron * 0.05; g -= iron * 0.06; b -= iron * 0.05;
+          const n = valueNoise3D(x * 0.02 + seed, y * 0.02, z * 0.02) * 0.04;
+          colors[i*3] = Math.min(1, Math.max(0, r + n));
+          colors[i*3+1] = Math.min(1, Math.max(0, g + n * 0.7));
+          colors[i*3+2] = Math.min(1, Math.max(0, b + n * 0.4));
+        }
+        geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geo.computeVertexNormals();
+      }
+
+      // Ceiling
+      const ceilGeo = new THREE.PlaneGeometry(CAVE_W + 20, CAVE_D + 20, 25, 25);
+      ceilGeo.rotateX(Math.PI / 2);
+      makeRockSurface(ceilGeo, 99, 0.55);
+      const ceil = new THREE.Mesh(ceilGeo, caveRockMat);
+      ceil.position.set(0, CAVE_H, CZ - CAVE_D / 2);
+      caveGroup.add(ceil);
+
+      // Floor
+      const flGeo = new THREE.PlaneGeometry(CAVE_W + 20, CAVE_D + 20, 25, 25);
+      flGeo.rotateX(-Math.PI / 2);
+      makeRockSurface(flGeo, 111, 0.70);
+      const fl = new THREE.Mesh(flGeo, caveRockMat.clone());
+      fl.material.vertexColors = true;
+      fl.position.set(0, 0.15, CZ - CAVE_D / 2);
+      caveGroup.add(fl);
+
+      // Left wall
+      const lwGeo = new THREE.PlaneGeometry(CAVE_D + 20, CAVE_H + 20, 25, 20);
+      lwGeo.rotateY(Math.PI / 2);
+      makeRockSurface(lwGeo, 55, 0.60);
+      const lw = new THREE.Mesh(lwGeo, caveRockMat);
+      lw.position.set(-CAVE_W / 2, CAVE_H / 2, CZ - CAVE_D / 2);
+      caveGroup.add(lw);
+
+      // Right wall
+      const rwGeo = new THREE.PlaneGeometry(CAVE_D + 20, CAVE_H + 20, 25, 20);
+      rwGeo.rotateY(-Math.PI / 2);
+      makeRockSurface(rwGeo, 77, 0.60);
+      const rw = new THREE.Mesh(rwGeo, caveRockMat);
+      rw.position.set(CAVE_W / 2, CAVE_H / 2, CZ - CAVE_D / 2);
+      caveGroup.add(rw);
+
+      // Back wall
+      const bwGeo = new THREE.PlaneGeometry(CAVE_W + 60, CAVE_H + 40, 20, 20);
+      makeRockSurface(bwGeo, 33, 0.45);
+      const bw = new THREE.Mesh(bwGeo, caveRockMat);
+      bw.position.set(0, CAVE_H / 2, CZ - CAVE_D);
+      caveGroup.add(bw);
+
+      // ── Hanging Industrial Lights ──
+      const hangPositions = [
+        { x: 0,    z: CZ - 50,  cableLen: 300 },
+        { x: -140, z: CZ - 120, cableLen: 320 },
+        { x:  140, z: CZ - 120, cableLen: 320 },
+        { x: 0,    z: CZ - 220, cableLen: 340 },
+        { x: -120, z: CZ - 330, cableLen: 350 },
+        { x:  120, z: CZ - 330, cableLen: 350 },
+        { x: 0,    z: CZ - 440, cableLen: 360 },
+        { x: -100, z: CZ - 540, cableLen: 370 },
+        { x:  100, z: CZ - 540, cableLen: 370 },
+      ];
+
+      hangPositions.forEach((hp) => {
+        const topY = CAVE_H;
+        const bulbY = topY - hp.cableLen;
+
+        // Cable
+        const cableGeo = new THREE.CylinderGeometry(0.5, 0.5, hp.cableLen, 4);
+        const cableMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8, metalness: 0.5 });
+        const cable = new THREE.Mesh(cableGeo, cableMat);
+        cable.position.set(hp.x, topY - hp.cableLen / 2, hp.z);
+        caveGroup.add(cable);
+
+        // Cone shade
+        const shadeGeo = new THREE.ConeGeometry(6, 4, 8, 1, true);
+        const shadeMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.6, metalness: 0.4, side: THREE.DoubleSide });
+        const shade = new THREE.Mesh(shadeGeo, shadeMat);
+        shade.position.set(hp.x, bulbY - 2, hp.z);
+        caveGroup.add(shade);
+
+        // Glowing bulb
+        const bulbGeo = new THREE.SphereGeometry(2, 8, 8);
+        const bulbMat = new THREE.MeshStandardMaterial({
+          color: 0xffdd88, emissive: 0xffcc66, emissiveIntensity: 3.0,
+          roughness: 0.2, metalness: 0.0,
+        });
+        const bulb = new THREE.Mesh(bulbGeo, bulbMat);
+        bulb.position.set(hp.x, bulbY - 4, hp.z);
+        caveGroup.add(bulb);
+
+        // Light
+        const pl = new THREE.PointLight(0xffaa55, 20, 400);
+        pl.position.set(hp.x, bulbY - 5, hp.z);
+        caveGroup.add(pl);
+      });
+
+      // Ambient fill
+      const caveAmb = new THREE.AmbientLight(0xffeedd, 0.3);
+      caveGroup.add(caveAmb);
+
+      // ── Geodesic Dome — large base structure inside cave ──
+      const domeRadius = 180;
+      const domeX = 0, domeZ = CZ - 320;
+
+      // Main dome shell — half sphere
+      const domeGeo = new THREE.SphereGeometry(domeRadius, 48, 24, 0, Math.PI * 2, 0, Math.PI / 2);
+      const domeMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff, emissive: 0x333333, emissiveIntensity: 0.5,
+        roughness: 0.25, metalness: 0.3,
+      });
+      const domeMesh = new THREE.Mesh(domeGeo, domeMat);
+      domeMesh.position.set(domeX, 0, domeZ);
+      caveGroup.add(domeMesh);
+
+      // Geodesic panel lines — low-poly edges for that faceted look
+      const panelGeo = new THREE.SphereGeometry(domeRadius * 1.003, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+      const panelEdges = new THREE.EdgesGeometry(panelGeo, 1);
+      const panelLines = new THREE.LineSegments(panelEdges,
+        new THREE.LineBasicMaterial({ color: 0x556677, linewidth: 1 })
+      );
+      panelLines.position.set(domeX, 0, domeZ);
+      caveGroup.add(panelLines);
+
+      // Base ring — concrete foundation
+      const domeBaseGeo = new THREE.CylinderGeometry(domeRadius * 1.08, domeRadius * 1.12, domeRadius * 0.08, 48);
+      const domeBaseMat = new THREE.MeshStandardMaterial({ color: 0x555566, roughness: 0.7, metalness: 0.3 });
+      const domeBase = new THREE.Mesh(domeBaseGeo, domeBaseMat);
+      domeBase.position.set(domeX, domeRadius * 0.04, domeZ);
+      caveGroup.add(domeBase);
+
+      // Window band — glowing strip around the dome at ~40% height
+      const windowGeo = new THREE.TorusGeometry(domeRadius * 0.88, 1.5, 4, 48);
+      const windowMat = new THREE.MeshStandardMaterial({
+        color: 0x88ccff, emissive: 0x4488cc, emissiveIntensity: 1.2,
+        roughness: 0.1, metalness: 0.5, transparent: true, opacity: 0.85,
+      });
+      const windowBand = new THREE.Mesh(windowGeo, windowMat);
+      windowBand.position.set(domeX, domeRadius * 0.4, domeZ);
+      windowBand.rotation.x = Math.PI / 2;
+      caveGroup.add(windowBand);
+
+      // Dome interior light (bright glow from within)
+      const domeLight = new THREE.PointLight(0xccddff, 20, 400);
+      domeLight.position.set(domeX, domeRadius * 0.5, domeZ);
+      caveGroup.add(domeLight);
+
+      // Entrance vestibule — box extension on the front
+      const vestW = 30, vestH = 35, vestD = 20;
+      const entranceGeo = new THREE.BoxGeometry(vestW, vestH, vestD);
+      const entranceMat = new THREE.MeshStandardMaterial({ color: 0xccccdd, roughness: 0.35, metalness: 0.4 });
+      const entrance = new THREE.Mesh(entranceGeo, entranceMat);
+      entrance.position.set(domeX, vestH / 2, domeZ + domeRadius + vestD / 2);
+      caveGroup.add(entrance);
+
+      // Door opening — glowing rectangle
+      const doorGeo = new THREE.PlaneGeometry(16, 28);
+      const doorMat = new THREE.MeshStandardMaterial({
+        color: 0x88ddff, emissive: 0x44aadd, emissiveIntensity: 1.5,
+        transparent: true, opacity: 0.85,
+      });
+      const door = new THREE.Mesh(doorGeo, doorMat);
+      door.position.set(domeX, 14, domeZ + domeRadius + vestD + 0.5);
+      caveGroup.add(door);
+
+      // Door light spilling out
+      const doorLight = new THREE.PointLight(0x88ddff, 8, 100);
+      doorLight.position.set(domeX, 15, domeZ + domeRadius + vestD + 5);
+      caveGroup.add(doorLight);
+
+      // Antenna mast on top
+      const antGeo = new THREE.CylinderGeometry(0.4, 0.4, 20, 6);
+      const antMat = new THREE.MeshStandardMaterial({ color: 0x888899, roughness: 0.5, metalness: 0.6 });
+      const ant = new THREE.Mesh(antGeo, antMat);
+      ant.position.set(domeX, domeRadius + 10, domeZ);
+      caveGroup.add(ant);
+
+      // Small red beacon on top
+      const beaconGeo = new THREE.SphereGeometry(1, 6, 6);
+      const beaconMat = new THREE.MeshStandardMaterial({
+        color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 2.0,
+      });
+      const beacon = new THREE.Mesh(beaconGeo, beaconMat);
+      beacon.position.set(domeX, domeRadius + 20, domeZ);
+      caveGroup.add(beacon);
+
+      // (single dome only — no secondary)
+
+      scene.add(caveGroup);
+    }
+
+    // ── Canyon Floor ─────────────────────────────────────────────────────
+
+    {
+      const { length, topWidth } = CONFIG;
+      const floorWidth = topWidth * 2.2;
+      const floorGeo = new THREE.PlaneGeometry(floorWidth, length, 80, 80);
+      floorGeo.rotateX(-Math.PI / 2);
+      const pos = floorGeo.attributes.position;
+      const fColors = new Float32Array(pos.count * 3);
+      const PAD_RADIUS = 15;
+      const padZ = -8000;
+
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const dx = x, dz = z - padZ;
+        const distSq = dx * dx + dz * dz;
+        const padFade = 1 - Math.min(1, distSq / (PAD_RADIUS * PAD_RADIUS * 9));
+        const ns = 0.0025;
+        const noiseH = fbm3D(x * ns + SEED, z * ns, SEED * 0.3, 6) * 14
+          + ridgedNoise3D(x * ns * 2 + SEED * 2, z * ns * 2, SEED + 1, 3) * 5
+          + valueNoise3D(x * ns * 8, z * ns * 8, SEED) * 2;
+        pos.setY(i, y + noiseH * (1 - padFade * padFade));
+
+        const colNoise = valueNoise3D(x * 0.01 + SEED, z * 0.01, SEED * 0.7);
+        fColors[i * 3] = Math.min(1, 0.46 + colNoise * 0.08);
+        fColors[i * 3 + 1] = Math.min(1, 0.34 + colNoise * 0.05);
+        fColors[i * 3 + 2] = Math.min(1, 0.22 + colNoise * 0.03);
+      }
+      floorGeo.setAttribute('color', new THREE.BufferAttribute(fColors, 3));
+      floorGeo.computeVertexNormals();
+
+      const floorMat = new THREE.MeshStandardMaterial({
+        vertexColors: true, roughness: 0.95, metalness: 0.0, flatShading: true,
+        normalMap: rockNormalMap, normalScale: new THREE.Vector2(0.6, 0.6),
+      });
+      scene.add(new THREE.Mesh(floorGeo, floorMat));
+
+      // Landing pad surface
+      const padGeo = new THREE.CircleGeometry(PAD_RADIUS, 48);
+      padGeo.rotateX(-Math.PI / 2);
+      const padMat = new THREE.MeshStandardMaterial({ color: 0x707880, roughness: 0.6, metalness: 0.35 });
+      const padMesh = new THREE.Mesh(padGeo, padMat);
+      padMesh.position.set(0, 0.05, padZ);
+      scene.add(padMesh);
+
+      // Glowing cyan ring
+      const ringGeo = new THREE.TorusGeometry(PAD_RADIUS, 0.4, 8, 64);
+      ringGeo.rotateX(Math.PI / 2);
+      const ringMat = new THREE.MeshStandardMaterial({
+        color: 0x00ffff, emissive: new THREE.Color(0x00cccc),
+        emissiveIntensity: 1.6, roughness: 0.2, metalness: 0.8,
+      });
+      const ringMesh = new THREE.Mesh(ringGeo, ringMat);
+      ringMesh.position.set(0, 0.15, padZ);
+      scene.add(ringMesh);
+
+      // Pad point light
+      const padLight = new THREE.PointLight(0x00ffff, 8, 120);
+      padLight.position.set(0, 5, padZ);
+      scene.add(padLight);
+    }
+
+    // ── Rock Arches ──────────────────────────────────────────────────────
+
+    function buildArch(z, seed) {
+      const span = CONFIG.baseWidth * 2 + 30;
+      const thickness = 10 + valueNoise3D(seed, z * 0.01, 1) * 5;
+      const arcHeight = CONFIG.wallHeight * 0.45;
+      const geo = new THREE.TorusGeometry(span / 2, thickness, 12, 24, Math.PI);
+      geo.rotateZ(Math.PI);
+      geo.rotateX(Math.PI / 2);
+
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), vz = pos.getZ(i);
+        const ns = 0.04;
+        const disp = fbm3D(x*ns+seed, y*ns, vz*ns+seed*2, 4) * 8
+          + valueNoise3D(x*ns*3+seed, y*ns*3, vz*ns*3) * 3;
+        const len = Math.sqrt(x*x + y*y + vz*vz) || 1;
+        pos.setXYZ(i, x+(x/len)*disp, y+(y/len)*disp, vz+(vz/len)*disp);
+      }
+      geo.computeVertexNormals();
+
+      const mat = new THREE.MeshStandardMaterial({
+        color: new THREE.Color(0.48, 0.26, 0.13),
+        roughness: 0.9, metalness: 0.03, flatShading: true,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(0, arcHeight, z);
+      return mesh;
+    }
+
+    // Arches removed — too distant from pad to read well in 360 view
+
+    // ── Distant Mesas ────────────────────────────────────────────────────
+
+    {
+      const mesaGroup = new THREE.Group();
+      const count = 10;
+      for (let i = 0; i < count; i++) {
+        const angle = (i / count) * Math.PI * 2 + SEED * 0.3;
+        const dist = 800 + valueNoise3D(i, SEED, 2) * 0.5 * 400 + 200;
+        const px = Math.cos(angle) * dist;
+        const pz = Math.sin(angle) * dist;
+        const w = 120 + valueNoise3D(i*3, SEED+1, 0) * 0.5 * 180;
+        const h = 80 + valueNoise3D(i*7, SEED+2, 1) * 0.5 * 200;
+        const d = 100 + valueNoise3D(i*5, SEED+3, 2) * 0.5 * 150;
+
+        const mGeo = new THREE.BoxGeometry(w, h, d, 6, 4, 6);
+        const mPos = mGeo.attributes.position;
+        for (let v = 0; v < mPos.count; v++) {
+          const vx = mPos.getX(v), vy = mPos.getY(v), vz = mPos.getZ(v);
+          const topness = Math.max(0, (vy / (h / 2) - 0.6) / 0.4);
+          const ns = 0.008;
+          const cliff = fbm3D(vx*ns+i, vy*ns, vz*ns+SEED, 4) * 18 * (1-topness);
+          const nx = vx / (w/2+0.01), nz = vz / (d/2+0.01);
+          const lat = Math.sqrt(nx*nx + nz*nz) || 1;
+          mPos.setX(v, vx + (nx/lat) * cliff * 0.7);
+          mPos.setZ(v, vz + (nz/lat) * cliff * 0.7);
+        }
+        mGeo.computeVertexNormals();
+
+        const mat = new THREE.MeshStandardMaterial({
+          color: new THREE.Color(0.42, 0.28, 0.18),
+          roughness: 0.95, metalness: 0.0, flatShading: true,
+        });
+        const mesa = new THREE.Mesh(mGeo, mat);
+        mesa.position.set(px, h / 2, pz);
+        mesaGroup.add(mesa);
+      }
+      scene.add(mesaGroup);
+    }
+
+    // Base Colony Domes — disabled (same as game: positioned outside canyon walls)
+
+    // ── Dust Particles ───────────────────────────────────────────────────
+
+    {
+      const dustCount = 2000;
+      const dustPositions = new Float32Array(dustCount * 3);
+      for (let i = 0; i < dustCount; i++) {
+        dustPositions[i*3]   = (Math.random() - 0.5) * 600;
+        dustPositions[i*3+1] = Math.random() * 400;
+        dustPositions[i*3+2] = -8000 + (Math.random() - 0.5) * 2000;
+      }
+      const dustGeo = new THREE.BufferGeometry();
+      dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+
+      // Soft circle texture
+      const tc = document.createElement('canvas');
+      tc.width = 32; tc.height = 32;
+      const tctx = tc.getContext('2d');
+      const grad = tctx.createRadialGradient(16,16,0,16,16,16);
+      grad.addColorStop(0, 'rgba(180,100,60,0.5)');
+      grad.addColorStop(0.5, 'rgba(180,100,60,0.15)');
+      grad.addColorStop(1, 'rgba(180,100,60,0)');
+      tctx.fillStyle = grad;
+      tctx.fillRect(0,0,32,32);
+
+      const dustMat = new THREE.PointsMaterial({
+        map: new THREE.CanvasTexture(tc),
+        size: 3, transparent: true, opacity: 0.3,
+        depthWrite: false, sizeAttenuation: true,
+      });
+      const dust = new THREE.Points(dustGeo, dustMat);
+      scene.add(dust);
+
+      // Animate dust
+      const dustVels = new Float32Array(dustCount * 3);
+      for (let i = 0; i < dustCount; i++) {
+        dustVels[i*3]   = (Math.random()-0.5) * 0.3;
+        dustVels[i*3+1] = (Math.random()-0.5) * 0.1;
+        dustVels[i*3+2] = (Math.random()-0.5) * 0.3;
+      }
+
+      function animateDust(dt) {
+        const pos = dust.geometry.attributes.position;
+        for (let i = 0; i < dustCount; i++) {
+          pos.array[i*3]   += dustVels[i*3] * dt;
+          pos.array[i*3+1] += dustVels[i*3+1] * dt;
+          pos.array[i*3+2] += dustVels[i*3+2] * dt;
+          // Wrap
+          if (pos.array[i*3] > 300) pos.array[i*3] = -300;
+          if (pos.array[i*3] < -300) pos.array[i*3] = 300;
+          if (pos.array[i*3+1] > 400) pos.array[i*3+1] = 0;
+          if (pos.array[i*3+1] < 0) pos.array[i*3+1] = 400;
+        }
+        pos.needsUpdate = true;
+      }
+
+      window._animateDust = animateDust;
+    }
+
+    // ── Starfield (visible through the canyon opening above) ─────────────
+
+    {
+      const starCount = 3000;
+      const starPos = new Float32Array(starCount * 3);
+      for (let i = 0; i < starCount; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI * 0.4; // upper hemisphere
+        const r = 30000 + Math.random() * 10000;
+        starPos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+        starPos[i*3+1] = r * Math.cos(phi);
+        starPos[i*3+2] = r * Math.sin(phi) * Math.sin(theta);
+      }
+      const starGeo = new THREE.BufferGeometry();
+      starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+      const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 6, sizeAttenuation: true });
+      scene.add(new THREE.Points(starGeo, starMat));
+    }
+
+    // ── Animate ──────────────────────────────────────────────────────────
+
+    let lastTime = performance.now();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const now = performance.now();
+      const dt = Math.min((now - lastTime) / 1000, 0.1) * 60;
+      lastTime = now;
+
+      controls.update();
+
+      if (window._animateDust) window._animateDust(dt);
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // ── Resize ───────────────────────────────────────────────────────────
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // ── Preset camera views ──────────────────────────────────────────────
+
+    const views = [
+      { name: 'Pad Level',    pos: [0, 30, -7800],  target: [0, 200, -8200] },
+      { name: 'Canyon Above', pos: [0, 800, -8000],  target: [0, 0, -8000] },
+      { name: 'Cave Mouth',   pos: [0, 200, -9700], target: [0, 150, -9960] },
+      { name: 'Inside Base',  pos: [0, 120, -10050], target: [0, 80, -10300] },
+      { name: 'Down Canyon',  pos: [0, 150, -7500], target: [0, 100, -6000] },
+      { name: 'Looking Up',   pos: [0, 50, -8000],  target: [0, 1500, -7500] },
+      { name: 'Wide Orbit',   pos: [500, 600, -6000], target: [0, 200, -8000] },
+    ];
+    let viewIdx = 0;
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'v' || e.key === 'V') {
+        viewIdx = (viewIdx + 1) % views.length;
+        const v = views[viewIdx];
+        camera.position.set(...v.pos);
+        controls.target.set(...v.target);
+        controls.update();
+        document.getElementById('info').textContent = `MARS CANYON — ${v.name.toUpperCase()}`;
+      }
+    });
+  </script>
+</body>
+</html>
