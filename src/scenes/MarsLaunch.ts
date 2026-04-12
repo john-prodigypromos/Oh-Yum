@@ -142,7 +142,7 @@ export function createMarsLaunch(
     animation: marsPromptFadeIn 1.0s ease-out forwards;
   `;
   const bannerTitle = document.createElement('div');
-  bannerTitle.textContent = 'LAUNCH FROM SECRET BASE ON MARS';
+  bannerTitle.textContent = 'SECRET BASE ON MARS (BUT SHARED PUBLICLY ONLINE)';
   bannerTitle.style.cssText = 'font-size:clamp(28px,5vw,48px);letter-spacing:5px;margin-bottom:8px;text-shadow:0 0 20px rgba(0,255,255,0.5),0 0 40px rgba(0,200,255,0.2);';
   promptEl.appendChild(bannerTitle);
   const bannerSub = document.createElement('div');
