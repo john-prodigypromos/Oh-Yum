@@ -42,7 +42,7 @@ function createPhotoSkybox(scene: THREE.Scene): THREE.Group {
 export function createStarfield(scene: THREE.Scene): THREE.Points {
   // Fewer, dimmer stars on mobile to reduce brightness/clutter
   const isMobile = 'ontouchstart' in window || window.innerWidth < 600;
-  const COUNT = isMobile ? 2500 : 6000;
+  const COUNT = isMobile ? 1200 : 3000;
   const SPREAD = 5000;
   const rng = seededRng(42);
 
