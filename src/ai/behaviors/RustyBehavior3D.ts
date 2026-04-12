@@ -71,18 +71,17 @@ export class RustyBehavior3D implements AIBehavior3D {
     const toPlayer = this._tmpVec.subVectors(target.position, self.position).normalize();
     const facingAlignment = forward.dot(toPlayer);
 
-    // ── Distance leash — never drift beyond 130 units ──
-    if (distToPlayer > 130 && this.phase !== 'merge') {
-      this._setPhase('merge');
+    // ── Distance leash — always steer back when beyond 130 units ──
+    // Block any phase except merge when too far out
+    if (distToPlayer > 130) {
+      if (this.phase !== 'merge') this._setPhase('merge');
     }
 
     // ── Phase transitions ──
     switch (this.phase) {
       case 'merge':
+        // Only exit merge when actually close — no safety timeout escape
         if (distToPlayer < 65 && facingAlignment > 0.4) {
-          this._setPhase('lead_turn');
-        }
-        if (this.phaseTimer > 5) {
           this._setPhase('lead_turn');
         }
         break;
@@ -108,8 +107,8 @@ export class RustyBehavior3D implements AIBehavior3D {
         if (distToPlayer > 90) {
           this._setPhase('lead_turn');
         }
-        // Head-on merge → break reversal (trigger more often)
-        if (facingAlignment < -0.4 && distToPlayer < 60) {
+        // Head-on merge → break reversal only when close (never when drifting)
+        if (facingAlignment < -0.4 && distToPlayer < 50) {
           this.breakDir *= -1;
           this._setPhase('break_reversal');
         }

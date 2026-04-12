@@ -143,8 +143,11 @@ export class BoloTieBehavior3D implements AIBehavior3D {
         pitch = steer.pitch;
         thrust = 1.0;
 
+        // Boost velocity but respect speed cap to prevent teleporting
         const chargeFwd = self.getForward();
-        self.velocity.addScaledVector(chargeFwd, 200 * dt);
+        self.velocity.addScaledVector(chargeFwd, 120 * dt);
+        const spd = self.velocity.length();
+        if (spd > 100 * self.speedMult) self.velocity.setLength(100 * self.speedMult);
 
         if (distToPlayer < 150 && facingAlignment > 0.2) {
           if (now - self.lastFireTime >= this.fireRate * 0.4) fire = true;

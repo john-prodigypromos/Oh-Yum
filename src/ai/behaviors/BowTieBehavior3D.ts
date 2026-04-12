@@ -60,14 +60,7 @@ export class BowTieBehavior3D implements AIBehavior3D {
       case 'hidden':
         if (this.phaseTimer > this.phaseDuration) {
           this._setPhase('approach');
-          // Warp to fog edge from a chaotic angle for the ambush
-          const angle = chaos(this.timer, this.seed) * Math.PI + Math.PI;
-          this._approachDir.set(
-            Math.cos(angle), (chaos(this.timer, this.seed * 2) - 0.5) * 0.3, Math.sin(angle),
-          ).normalize();
-          self.position.copy(target.position).addScaledVector(this._approachDir, this.FOG_RANGE + 50);
-          self.velocity.copy(this._approachDir).negate().multiplyScalar(50);
-          self.group.lookAt(target.position);
+          // Steer toward player from current position — no teleporting
           this.breakDir *= -1;
         }
         break;
