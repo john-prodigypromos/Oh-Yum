@@ -770,19 +770,17 @@ export function createBlackHole(scene: THREE.Scene): LevelEnvironment {
   group.add(holeMesh);
   disposables.push(holeGeo, holeMat);
 
-  // ── 2. Outer volumetric glow (massive light wash radiating outward) ──
-  // Smooth gradient from bright core to dark space over 5x the original range
+  // ── 2. Outer volumetric glow (wide light wash radiating outward) ──
+  // Gentle gradient — never saturates to white, fades smoothly to black
   const outerGlowTex = makeGlowTexture(512, [
-    { pos: 0, color: 'rgba(255, 180, 60, 0.45)' },
-    { pos: 0.03, color: 'rgba(255, 150, 40, 0.38)' },
-    { pos: 0.08, color: 'rgba(255, 120, 25, 0.30)' },
-    { pos: 0.15, color: 'rgba(230, 90, 10, 0.22)' },
-    { pos: 0.25, color: 'rgba(180, 60, 5, 0.14)' },
-    { pos: 0.38, color: 'rgba(130, 40, 2, 0.08)' },
-    { pos: 0.52, color: 'rgba(80, 25, 0, 0.04)' },
-    { pos: 0.68, color: 'rgba(40, 12, 0, 0.018)' },
-    { pos: 0.82, color: 'rgba(20, 5, 0, 0.007)' },
-    { pos: 0.93, color: 'rgba(8, 2, 0, 0.002)' },
+    { pos: 0, color: 'rgba(255, 160, 50, 0.18)' },
+    { pos: 0.05, color: 'rgba(255, 130, 35, 0.14)' },
+    { pos: 0.12, color: 'rgba(220, 90, 15, 0.10)' },
+    { pos: 0.22, color: 'rgba(170, 60, 5, 0.06)' },
+    { pos: 0.35, color: 'rgba(120, 35, 2, 0.035)' },
+    { pos: 0.50, color: 'rgba(70, 20, 0, 0.018)' },
+    { pos: 0.68, color: 'rgba(35, 10, 0, 0.008)' },
+    { pos: 0.85, color: 'rgba(12, 3, 0, 0.003)' },
     { pos: 1, color: 'rgba(0, 0, 0, 0)' },
   ]);
   const outerGlowMat = new THREE.SpriteMaterial({
@@ -796,11 +794,11 @@ export function createBlackHole(scene: THREE.Scene): LevelEnvironment {
 
   // ── 3. Inner intense glow (white-hot core halo) ──
   const innerGlowTex = makeGlowTexture(512, [
-    { pos: 0, color: 'rgba(255, 240, 180, 0.6)' },
-    { pos: 0.08, color: 'rgba(255, 200, 80, 0.5)' },
-    { pos: 0.2, color: 'rgba(255, 140, 30, 0.3)' },
-    { pos: 0.4, color: 'rgba(255, 80, 5, 0.12)' },
-    { pos: 0.7, color: 'rgba(120, 30, 0, 0.03)' },
+    { pos: 0, color: 'rgba(255, 220, 140, 0.35)' },
+    { pos: 0.08, color: 'rgba(255, 180, 60, 0.28)' },
+    { pos: 0.2, color: 'rgba(255, 120, 25, 0.18)' },
+    { pos: 0.4, color: 'rgba(200, 60, 5, 0.07)' },
+    { pos: 0.7, color: 'rgba(100, 25, 0, 0.02)' },
     { pos: 1, color: 'rgba(0, 0, 0, 0)' },
   ]);
   const innerGlowMat = new THREE.SpriteMaterial({
