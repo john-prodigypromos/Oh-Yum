@@ -155,7 +155,7 @@ export class BowTieBehavior3D implements AIBehavior3D {
     }
 
     // ── Jink overlay — darting, quick ──
-    const jink = jinkOverlay(this.timer, this.seed, 0.55);
+    const jink = jinkOverlay(this.timer, this.seed, 0.8);
     yaw = Math.max(-1, Math.min(1, yaw + jink.yaw));
     pitch = Math.max(-1, Math.min(1, pitch + jink.pitch));
 

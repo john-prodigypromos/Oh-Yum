@@ -130,8 +130,9 @@ export function chaos(t: number, seed: number): number {
 }
 
 /**
- * Micro-correction overlay that creates human-like twitchy flight.
- * Apply after computing steering but before clamping.
+ * Evasive maneuver overlay — hard lateral and vertical dodging.
+ * Three incommensurate frequencies create complex, unpredictable
+ * weaving that looks like active evasion.
  *
  * @param intensity  0.0-1.0 — personality-dependent jink strength
  */
@@ -140,11 +141,14 @@ export function jinkOverlay(
   seed: number,
   intensity: number,
 ): { yaw: number; pitch: number } {
-  const jY = Math.sin(timer * 11.3 + seed) * Math.sin(timer * 4.7 + seed * 2.3);
-  const jP = Math.cos(timer * 9.1 + seed * 1.3) * Math.sin(timer * 5.9 + seed * 0.7);
+  // Three frequencies beating against each other for complex evasion
+  const jY = Math.sin(timer * 11.3 + seed) * Math.sin(timer * 4.7 + seed * 2.3)
+           + Math.sin(timer * 7.9 + seed * 0.8) * 0.5;
+  const jP = Math.cos(timer * 9.1 + seed * 1.3) * Math.sin(timer * 5.9 + seed * 0.7)
+           + Math.cos(timer * 6.3 + seed * 1.9) * 0.5;
   return {
-    yaw: jY * intensity * 0.3,
-    pitch: jP * intensity * 0.2,
+    yaw: jY * intensity * 0.55,   // strong lateral dodging
+    pitch: jP * intensity * 0.45,  // strong vertical dodging
   };
 }
 

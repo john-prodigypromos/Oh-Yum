@@ -32,7 +32,7 @@ export function applyShipPhysics(ship: Ship3D, input: ShipInput, dt: number, now
   }
   // Pitch around LOCAL X-axis
   if (input.pitch !== 0) {
-    _quat.setFromAxisAngle(_pitchAxis, input.pitch * rotSpeed * 0.7 * dt);
+    _quat.setFromAxisAngle(_pitchAxis, input.pitch * rotSpeed * 0.9 * dt);
     ship.group.quaternion.multiply(_quat); // multiply = local space
   }
 

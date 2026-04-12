@@ -244,7 +244,7 @@ export class RustyBehavior3D implements AIBehavior3D {
     }
 
     // ── Jink overlay — scrappy, erratic ──
-    const jink = jinkOverlay(this.timer, this.seed, 0.6);
+    const jink = jinkOverlay(this.timer, this.seed, 0.85);
     yaw = Math.max(-1, Math.min(1, yaw + jink.yaw));
     pitch = Math.max(-1, Math.min(1, pitch + jink.pitch));
 

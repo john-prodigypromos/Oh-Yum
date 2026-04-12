@@ -113,9 +113,9 @@ export class BishopBehavior3D implements AIBehavior3D {
     }
 
     // ── Jink intensity escalates with desperation ──
-    const jinkIntensity = this.bossPhase === 'phase3' ? 0.7
-      : this.bossPhase === 'phase2' ? 0.45
-      : 0.25;
+    const jinkIntensity = this.bossPhase === 'phase3' ? 1.0
+      : this.bossPhase === 'phase2' ? 0.8
+      : 0.6;
 
     // ── Steering per sub-phase ──
     let yaw = 0;
