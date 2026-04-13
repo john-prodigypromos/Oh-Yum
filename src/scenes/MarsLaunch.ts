@@ -139,11 +139,13 @@ export function createMarsLaunch(
     text-align: center;
     pointer-events: none;
     z-index: 20;
+    max-width: 90vw;
+    padding: 0 12px;
     animation: marsPromptFadeIn 1.0s ease-out forwards;
   `;
   const bannerTitle = document.createElement('div');
   bannerTitle.textContent = 'SECRET BASE ON MARS (BUT SHARED PUBLICLY ONLINE)';
-  bannerTitle.style.cssText = 'font-size:clamp(28px,5vw,48px);letter-spacing:5px;margin-bottom:8px;text-shadow:0 0 20px rgba(0,255,255,0.5),0 0 40px rgba(0,200,255,0.2);';
+  bannerTitle.style.cssText = 'font-size:clamp(16px,min(4vw,6vh),42px);letter-spacing:3px;margin-bottom:8px;text-shadow:0 0 20px rgba(0,255,255,0.5),0 0 40px rgba(0,200,255,0.2);line-height:1.2;';
   promptEl.appendChild(bannerTitle);
   const bannerSub = document.createElement('div');
   bannerSub.textContent = 'HOLD THRUST TO LAUNCH';
