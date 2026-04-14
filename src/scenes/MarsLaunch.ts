@@ -42,6 +42,8 @@ export interface MarsLaunchState {
   phase: 'grounded' | 'climbing' | 'orbit';
   orbitReached: boolean;
   orbitTimer: number;
+  crashed: boolean;
+  crashTime: number;
   promptEl: HTMLDivElement | null;
 }
 
@@ -191,6 +193,8 @@ export function createMarsLaunch(
     phase: 'grounded',
     orbitReached: false,
     orbitTimer: 0,
+    crashed: false,
+    crashTime: 0,
     promptEl,
   };
 }
@@ -204,7 +208,7 @@ export function updateMarsLaunch(
   now: number,
   scene: THREE.Scene,
 ): void {
-  if (state.orbitReached) return;
+  if (state.orbitReached || state.crashed) return;
 
   const { player, cockpitCam, touchControls, mouseControls, sound, hud } = state;
 
@@ -249,47 +253,30 @@ export function updateMarsLaunch(
   // ── Physics ──
   applyShipPhysics(player, input, dt, now, atmosMods);
 
-  // ── Floor/surface collision — bounce, don't kill ──
+  // ── Hard floor — cannot go below surface ──
   if (player.position.y < 0) {
-    const impactSpeed = Math.abs(player.velocity.y);
     player.position.y = 0;
-    player.velocity.y = Math.abs(player.velocity.y) * 0.3; // bounce up
-    if (impactSpeed > 20) {
-      player.applyDamage(Math.min(15, Math.round(impactSpeed * 0.3)), now);
-      cockpitCam.shake(Math.min(3.0, impactSpeed * 0.05));
-    }
+    if (player.velocity.y < 0) player.velocity.y = 0;
+  }
+  // Keep ship on the pad while grounded
+  if (state.phase === 'grounded' && player.position.y < 15) {
+    player.position.y = 15;
+    if (player.velocity.y < 0) player.velocity.y = 0;
   }
 
-  // ── Canyon wall collision — bounce off, don't kill ──
+  // ── Canyon wall collision — deadly, ship explodes ──
   const wallHalfWidth = 35 + state.altitude * 0.1;
-  if (player.position.x < -wallHalfWidth) {
-    const wallSpeed = Math.abs(player.velocity.x);
-    player.position.x = -wallHalfWidth;
-    player.velocity.x = Math.abs(player.velocity.x) * 0.4; // bounce inward
-    if (wallSpeed > 10) {
-      player.applyDamage(Math.min(10, Math.round(wallSpeed * 0.2)), now);
-      cockpitCam.shake(Math.min(2.0, wallSpeed * 0.03));
-    }
-  } else if (player.position.x > wallHalfWidth) {
-    const wallSpeed = Math.abs(player.velocity.x);
-    player.position.x = wallHalfWidth;
-    player.velocity.x = -Math.abs(player.velocity.x) * 0.4; // bounce inward
-    if (wallSpeed > 10) {
-      player.applyDamage(Math.min(10, Math.round(wallSpeed * 0.2)), now);
-      cockpitCam.shake(Math.min(2.0, wallSpeed * 0.03));
-    }
-  }
-
-  // ── Death recovery — respawn on pad if somehow killed ──
-  if (!player.alive) {
-    player.hull = Math.round(player.maxHull * 0.5);
-    player.shield = player.maxShield;
-    player.alive = true;
+  if (player.position.x < -wallHalfWidth || player.position.x > wallHalfWidth) {
+    player.position.x = Math.max(-wallHalfWidth, Math.min(wallHalfWidth, player.position.x));
     player.velocity.set(0, 0, 0);
-    player.position.set(0, 15, -8000);
-    state.phase = 'grounded';
-    state.altitude = 15;
-    cockpitCam.shake(1.0);
+    player.alive = false;
+    player.hull = 0;
+    state.crashed = true;
+    state.crashTime = now;
+    cockpitCam.shake(5.0);
+    sound.explosion();
+    sound.stopWindDrone();
+    sound.stopLaunchEngine();
   }
 
   // ── Sky color from atmosphere visuals ──

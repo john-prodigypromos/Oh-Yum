@@ -688,7 +688,9 @@ function animate() {
     }
   } else if (sceneManager.current === 'marsLaunch' && marsLaunch) {
     updateMarsLaunch(marsLaunch, keys, dt, now, bundle.scene);
-    if (marsLaunch.orbitReached && now - marsLaunch.orbitTimer > 2000) {
+    if (marsLaunch.crashed && now - marsLaunch.crashTime > 2000) {
+      sceneManager.transition('gameOver');
+    } else if (marsLaunch.orbitReached && now - marsLaunch.orbitTimer > 2000) {
       sceneManager.transition('levelIntro');
     }
   } else if (sceneManager.current === 'title') {
