@@ -1,48 +1,32 @@
-// ── Rusty AI Behavior (3D) ───────────────────────────────
-// F-22 style BFM with organic feel: lead turns, lag pursuit,
-// high yo-yos, defensive reversals. Difficulty-driven aggression,
-// jink evasion, and engagement intensity.
+// ── Rusty AI (Grunt Dogfighter) ──────────────────────────
+// Simple Top Gun chase-and-evade. Four states:
+// CHASE → ENGAGE → OVERSHOOT → EVADE → repeat
+// Difficulty-driven via AIConfig. Index-staggered to prevent clumping.
 
 import * as THREE from 'three';
 import { Ship3D } from '../../entities/Ship3D';
-import { AI } from '../../config';
 import type { AIBehavior3D, AIConfig } from '../AIBehavior3D';
 import type { ShipInput } from '../../systems/PhysicsSystem3D';
 import { steerToward, steerAway, leadIntercept, chaos, jinkOverlay } from '../Steering';
 
 let enemyIndex = 0;
 
-type Phase =
-  | 'merge'         // closing to fight range
-  | 'lead_turn'     // aggressive nose-on, cutting inside target's turn
-  | 'lag_pursuit'   // trail behind target's velocity vector — guns setup
-  | 'high_yo_yo'    // vertical reversal after overshoot — pull up, then dive
-  | 'break_reversal'; // defensive break when caught out — short, sharp
+type Phase = 'chase' | 'engage' | 'overshoot' | 'evade';
 
 export class RustyBehavior3D implements AIBehavior3D {
   private fireRate: number;
-  private timer = 0;
-  private phase: Phase = 'merge';
+  private cfg: AIConfig;
+  private phase: Phase = 'chase';
   private phaseTimer = 0;
   private phaseDuration = 0;
+  private timer = 0;
   private idx: number;
   private seed: number;
-  private cfg: AIConfig;
+  private breakDir: number;
 
-  // Break direction: +1 = break right, -1 = break left
-  private breakDir = 1;
-  // Alternates between break_reversal and lag_pursuit after lead_turn
-  private _lastBreak = false;
-  // Vertical offset per enemy so they don't stack
-  private verticalBias: number;
-  // Yo-yo apex target
-  private yoYoApex = new THREE.Vector3();
-
-  // Pre-allocated temp vectors (avoid per-frame GC)
+  // Pre-allocated temp vectors
   private _interceptPt = new THREE.Vector3();
-  private _lagPt = new THREE.Vector3();
   private _tmpVec = new THREE.Vector3();
-  private _right = new THREE.Vector3();
 
   constructor(
     _aimAccuracy: number,
@@ -54,10 +38,10 @@ export class RustyBehavior3D implements AIBehavior3D {
     this.cfg = cfg;
     this.idx = enemyIndex++;
     this.seed = this.idx * 2.17;
-    this.timer = this.idx * 3;
-    this.phaseTimer = this.idx * 1.5;
+    this.timer = this.idx * 2.5;        // stagger start times
+    this.phaseTimer = this.idx * 0.8;
     this.breakDir = this.idx % 2 === 0 ? 1 : -1;
-    this.verticalBias = (this.idx % 3 - 1) * 20;
+    this._setPhase('chase');
   }
 
   update(self: Ship3D, target: Ship3D, dt: number, now: number): ShipInput & { fire: boolean } {
@@ -69,180 +53,116 @@ export class RustyBehavior3D implements AIBehavior3D {
     this.phaseTimer += dt;
 
     const { sensitivity, aggression, leashRange } = this.cfg;
-    const distToPlayer = self.position.distanceTo(target.position);
+    const dist = self.position.distanceTo(target.position);
     const forward = self.getForward();
     const toPlayer = this._tmpVec.subVectors(target.position, self.position).normalize();
-    const facingAlignment = forward.dot(toPlayer);
+    const facing = forward.dot(toPlayer);
+    const engageRange = leashRange * 0.55;
 
-    // ── Distance leash — always steer back when beyond leash range ──
-    if (distToPlayer > leashRange) {
-      if (this.phase !== 'merge') this._setPhase('merge');
+    // ── Distance leash — forced chase if too far ──
+    if (dist > leashRange && this.phase !== 'chase') {
+      this._setPhase('chase');
     }
 
     // ── Phase transitions ──
     switch (this.phase) {
-      case 'merge':
-        if (distToPlayer < leashRange * 0.5 && facingAlignment > 0.4) {
-          this._setPhase('lead_turn');
+      case 'chase':
+        if (dist < engageRange && facing > 0.4) {
+          this._setPhase('engage');
         }
         break;
 
-      case 'lead_turn':
-        if (this.phaseTimer > this.phaseDuration) {
-          if (this._lastBreak) {
-            this._setPhase('lag_pursuit');
-          } else {
-            this.breakDir *= -1;
-            this._setPhase('break_reversal');
-          }
-          this._lastBreak = !this._lastBreak;
-        }
-        // Overshoot → yo-yo
-        if (this.phaseTimer > 0.4 && facingAlignment < -0.3 && distToPlayer < 80) {
-          this._setupYoYo(self, target);
-          this._setPhase('high_yo_yo');
-        }
-        break;
-
-      case 'lag_pursuit':
-        if (distToPlayer > leashRange * 0.7) {
-          this._setPhase('lead_turn');
-        }
-        if (facingAlignment < -0.4 && distToPlayer < 50) {
+      case 'engage':
+        if (facing < -0.3 && dist < 80) {
+          this._setPhase('overshoot');
+        } else if (this.phaseTimer > this.phaseDuration || dist > leashRange * 0.7) {
           this.breakDir *= -1;
-          this._setPhase('break_reversal');
-        }
-        if (this.phaseTimer > this.phaseDuration) {
+          this._setPhase('evade');
+        } else if (facing < -0.2) {
           this.breakDir *= -1;
-          this._setPhase('lead_turn');
+          this._setPhase('evade');
         }
         break;
 
-      case 'high_yo_yo':
+      case 'overshoot':
         if (this.phaseTimer > this.phaseDuration) {
-          this._setPhase('lag_pursuit');
+          this._setPhase('chase');
         }
         break;
 
-      case 'break_reversal':
-        if (this.phaseTimer > this.phaseDuration) {
-          this._setPhase('lead_turn');
+      case 'evade':
+        // Rolling scissors shortcut — if break put us on their six, go straight to engage
+        if (facing > 0.5 && dist < engageRange) {
+          this._setPhase('engage');
+        } else if (this.phaseTimer > this.phaseDuration) {
+          this._setPhase('chase');
         }
         break;
     }
 
-    // ── Steering per phase ──
+    // ── Steering ──
     let yaw = 0;
     let pitch = 0;
-    let thrust = 0.6;
+    let thrust = 0.7;
     let fire = false;
 
     switch (this.phase) {
-      case 'merge': {
-        leadIntercept(
-          self.position, target.position, target.velocity,
-          100, this._interceptPt,
-        );
-        this._interceptPt.y += this.verticalBias + 15 * (this.idx % 2 === 0 ? 1 : -1);
-
-        const steer = steerToward(self, this._interceptPt, sensitivity * 1.2, 0.7);
+      case 'chase': {
+        leadIntercept(self.position, target.position, target.velocity, 100, this._interceptPt);
+        // Vertical offset per enemy to prevent stacking
+        this._interceptPt.y += (this.idx % 3 - 1) * 15;
+        const steer = steerToward(self, this._interceptPt, sensitivity, 0.6);
         yaw = steer.yaw;
         pitch = steer.pitch;
-        thrust = facingAlignment > 0 ? 0.9 : 0.2;
-
-        if (distToPlayer < 120 && facingAlignment > 0.3) {
+        thrust = 0.9;
+        // Opportunistic fire while closing
+        if (dist < engageRange * 1.3 && facing > this.cfg.fireCone) {
           if (now - self.lastFireTime >= this.fireRate) fire = true;
         }
         break;
       }
 
-      case 'lead_turn': {
-        leadIntercept(
-          self.position, target.position, target.velocity,
-          110, this._interceptPt,
-        );
-        this._right.set(-toPlayer.z, 0, toPlayer.x);
-        const scissorOffset = chaos(this.timer, this.seed) * 35 * this.breakDir;
-        this._interceptPt.addScaledVector(this._right, scissorOffset);
-        this._interceptPt.y += Math.cos(this.timer * 1.2) * 15 + 15 * (this.idx % 2 === 0 ? 1 : -1);
-
-        const steer = steerToward(self, this._interceptPt, sensitivity, 0.7);
+      case 'engage': {
+        leadIntercept(self.position, target.position, target.velocity, 110, this._interceptPt);
+        const steer = steerToward(self, this._interceptPt, sensitivity * 1.1, 0.7);
         yaw = steer.yaw;
         pitch = steer.pitch;
-        thrust = this.phaseTimer < this.phaseDuration * 0.5 ? 1.0 : 0.8;
-
-        if (distToPlayer < 120 && facingAlignment > 0.25) {
-          if (now - self.lastFireTime >= this.fireRate * 0.6) fire = true;
+        thrust = 1.0;
+        // Aggressive fire
+        if (facing > this.cfg.fireCone) {
+          if (now - self.lastFireTime >= this.fireRate * 0.5) fire = true;
         }
         break;
       }
 
-      case 'lag_pursuit': {
-        const playerFwd = target.getForward();
-        this._lagPt.copy(target.position);
-        this._lagPt.addScaledVector(playerFwd, -15);
-        this._lagPt.y += this.verticalBias * 0.5;
-
-        const steer = steerToward(self, this._lagPt, sensitivity * 1.1, 0.65);
+      case 'overshoot': {
+        // Short vertical pull-up after passing through the player
+        const steer = steerAway(self, target.position, sensitivity * 0.7, 0.5, 0);
         yaw = steer.yaw;
-        pitch = steer.pitch;
-        thrust = facingAlignment > 0.5 ? 1.0 : 0.85;
-
-        if (distToPlayer < 100 && facingAlignment > 0.2) {
-          if (now - self.lastFireTime >= this.fireRate * 0.45) fire = true;
-        }
-        break;
-      }
-
-      case 'high_yo_yo': {
-        if (this.phaseTimer < this.phaseDuration * 0.5) {
-          const steer = steerToward(self, this.yoYoApex, sensitivity * 0.8, 0.5);
-          yaw = steer.yaw;
-          pitch = steer.pitch;
-          thrust = 0.5;
-        } else {
-          leadIntercept(
-            self.position, target.position, target.velocity,
-            90, this._interceptPt,
-          );
-          const steer = steerToward(self, this._interceptPt, sensitivity, 0.8);
-          yaw = steer.yaw;
-          pitch = steer.pitch;
-          thrust = 0.9;
-        }
-
-        if (distToPlayer < 100 && facingAlignment > 0.35) {
-          if (now - self.lastFireTime >= this.fireRate) fire = true;
-        }
-        break;
-      }
-
-      case 'break_reversal': {
-        const steer = steerAway(self, target.position, sensitivity, 0.75, this.breakDir * 0.9);
-        yaw = steer.yaw;
-        pitch = steer.pitch;
-        thrust = steer.thrust;
-        pitch += (this.idx % 2 === 0 ? -0.4 : 0.4);
+        pitch = steer.pitch - 0.5; // pull up
         pitch = Math.max(-1, Math.min(1, pitch));
+        thrust = 0.5;
+        break;
+      }
 
-        if (distToPlayer < 80 && facingAlignment > 0.2) {
-          if (now - self.lastFireTime >= this.fireRate * 1.2) fire = true;
-        }
+      case 'evade': {
+        const steer = steerAway(self, target.position, sensitivity, 0.8, this.breakDir * 0.8);
+        yaw = steer.yaw;
+        pitch = steer.pitch + this.breakDir * 0.3;
+        pitch = Math.max(-1, Math.min(1, pitch));
+        thrust = 0.85;
         break;
       }
     }
 
-    // ── Jink evasion overlay — scaled by difficulty and phase ──
-    const isAttacking = this.phase === 'lead_turn' || this.phase === 'lag_pursuit';
-    const jinkScale = isAttacking ? 0.3 : 1.0; // less jink when aiming
+    // ── Jink overlay — light when attacking, heavy when evading ──
+    const jinkScale = this.phase === 'evade' ? 1.0 : 0.2;
     const jink = jinkOverlay(this.timer, this.seed, this.cfg.jinkIntensity * jinkScale);
     yaw += jink.yaw;
     pitch += jink.pitch;
 
     yaw = Math.max(-1, Math.min(1, yaw));
     pitch = Math.max(-1, Math.min(1, pitch));
-
-    // ── Banking roll — fighter jets bank into turns ──
     const roll = -yaw * 0.6;
 
     return { yaw, pitch, roll, thrust, fire };
@@ -251,21 +171,14 @@ export class RustyBehavior3D implements AIBehavior3D {
   private _setPhase(phase: Phase): void {
     this.phase = phase;
     this.phaseTimer = 0;
-
-    // Higher aggression = shorter phase durations (more rapid transitions)
-    const aggrScale = 1 - this.cfg.aggression * 0.5;
+    const aggrScale = 1 - this.cfg.aggression * 0.4;
+    const r = (chaos(this.timer, this.seed) + 1) * 0.5; // 0-1 random
 
     switch (phase) {
-      case 'lead_turn':      this.phaseDuration = (0.7 + (chaos(this.timer, this.seed) + 1) * 0.4) * aggrScale; break;
-      case 'lag_pursuit':    this.phaseDuration = (1.2 + (chaos(this.timer, this.seed) + 1) * 0.8) * aggrScale; break;
-      case 'high_yo_yo':     this.phaseDuration = (0.6 + (chaos(this.timer, this.seed) + 1) * 0.2) * aggrScale; break;
-      case 'break_reversal': this.phaseDuration = (0.3 + (chaos(this.timer, this.seed) + 1) * 0.2) * aggrScale; break;
-      default:               this.phaseDuration = 3 * aggrScale; break;
+      case 'chase':     this.phaseDuration = 5; break; // no timeout — exits on range
+      case 'engage':    this.phaseDuration = (1.5 + r * 1.5) * aggrScale; break; // 1.5-3s
+      case 'overshoot': this.phaseDuration = 0.3 + r * 0.3; break;              // 0.3-0.6s
+      case 'evade':     this.phaseDuration = (0.5 + r * 0.4) * aggrScale; break; // 0.5-0.9s
     }
-  }
-
-  private _setupYoYo(self: Ship3D, target: Ship3D): void {
-    this.yoYoApex.addVectors(self.position, target.position).multiplyScalar(0.5);
-    this.yoYoApex.y += 35 + (this.idx % 2) * 10;
   }
 }
