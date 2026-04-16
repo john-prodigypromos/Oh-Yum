@@ -25,6 +25,17 @@ export class CockpitCamera {
     this.camera = camera;
   }
 
+  /** Instantly position the camera on a ship — call once at scene start. */
+  snapTo(player: Ship3D): void {
+    this._worldOffset.copy(this.offset);
+    this._worldOffset.applyQuaternion(player.quaternion);
+    this._worldPos.copy(player.position).add(this._worldOffset);
+    this.camera.position.copy(this._worldPos);
+    const forward = player.getForward();
+    this._lookTarget.copy(player.position).addScaledVector(forward, 20);
+    this.camera.lookAt(this._lookTarget);
+  }
+
   /** Call every frame after physics. Attaches camera to player ship. */
   update(player: Ship3D, dt: number, yawInput: number): void {
     // Calculate world-space camera position
@@ -41,10 +52,11 @@ export class CockpitCamera {
       this.camera.position.lerp(this._worldPos, Math.min(1, dt * 30));
     }
 
-    // Look target — slightly ahead of ship
+    // Look target — slightly ahead of ship (snap when stationary, lerp when flying)
     const forward = player.getForward();
-    this._lookTarget.copy(player.position).addScaledVector(forward, 20);
-    this.camera.lookAt(this._lookTarget);
+    const targetLook = this._lookTarget;
+    targetLook.copy(player.position).addScaledVector(forward, 20);
+    this.camera.lookAt(targetLook);
 
     // No roll — keep horizon stable for cockpit feel
 

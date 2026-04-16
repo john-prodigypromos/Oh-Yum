@@ -114,6 +114,7 @@ export function createMarsLaunch(
 
   // ── Systems ──
   const cockpitCam = new CockpitCamera(camera);
+  cockpitCam.snapTo(player); // instant position — no drift from previous scene
   const touchControls = new TouchControls3D();
   const mouseControls = new MouseControls();
   const sound = SoundSystem.getInstance();
