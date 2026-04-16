@@ -303,7 +303,7 @@ function showCharSelectOverlay(): void {
 
     card.addEventListener('click', () => {
       setCharacter(id);
-      sceneManager.transition('marsLaunch');
+      sceneManager.transition('levelIntro');
     });
     grid.appendChild(card);
   }
