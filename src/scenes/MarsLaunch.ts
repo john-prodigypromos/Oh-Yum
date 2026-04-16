@@ -268,20 +268,31 @@ export function updateMarsLaunch(
   // ── Physics (only when climbing/flying) ──
   applyShipPhysics(player, input, dt, now, atmosMods);
 
-  // ── Auto-pitch upward during first 3 seconds of climb ──
-  // Ship starts facing forward along canyon; we smoothly rotate it
-  // to point upward so thrust carries the player into the sky.
+  // ── Auto-climb during first 3 seconds — force upward movement ──
+  // Instead of fighting the quaternion, simply override velocity to
+  // point upward and smoothly rotate the ship to match.
   state.climbTimer += dt;
   if (state.climbTimer < 3.0) {
-    const upQuat = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(1, 0, 0), -Math.PI / 2, // nose up
+    const speed = Math.max(player.velocity.length(), 50); // minimum climb speed
+    const blend = Math.min(1, state.climbTimer / 2.0); // 0→1 over 2 seconds
+
+    // Blend velocity from current direction toward straight up
+    player.velocity.x *= (1 - blend * 0.05);
+    player.velocity.z *= (1 - blend * 0.05);
+    if (player.velocity.y < speed * blend) {
+      player.velocity.y = speed * blend;
+    }
+
+    // Smoothly rotate ship to face upward — lookAt a point above
+    const lookUp = new THREE.Vector3(
+      player.position.x,
+      player.position.y + 100,
+      player.position.z + (1 - blend) * 50, // slight forward lean that fades
     );
-    const t = Math.min(1, state.climbTimer / 2.5); // ease over 2.5s
-    player.group.quaternion.slerp(upQuat, t * 0.05); // gentle per-frame blend
+    const lookMat = new THREE.Matrix4().lookAt(player.position, lookUp, new THREE.Vector3(0, 0, -1));
+    const targetQuat = new THREE.Quaternion().setFromRotationMatrix(lookMat);
+    player.group.quaternion.slerp(targetQuat, 0.03);
     player.group.quaternion.normalize();
-    // Also push velocity upward to match the rotation
-    const fwd = player.getForward();
-    player.velocity.copy(fwd).multiplyScalar(player.velocity.length());
   }
 
   // ── Hard floor — absolutely cannot go below surface ──
