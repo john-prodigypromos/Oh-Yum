@@ -335,10 +335,20 @@ export function updateArena(
     state.lockedTargetIndex = visibleIndices[0];
   }
 
-  // ── Player weapons — fire at locked target ──
+  // ── Player weapons — fire at locked target only if in center 33% of screen ──
   if (keys['Space'] || touch.fire) {
-    const target = state.lockedTargetIndex >= 0 ? enemies[state.lockedTargetIndex] : undefined;
-    if (tryFireWeapon(player, boltPool, now, undefined, target)) {
+    let fireTarget: Ship3D | undefined;
+    if (state.lockedTargetIndex >= 0) {
+      const locked = enemies[state.lockedTargetIndex];
+      if (locked && locked.alive) {
+        _projTmp.copy(locked.position).project(cam);
+        // Only auto-aim if target is within center 33% of screen
+        if (Math.abs(_projTmp.x) < 0.33 && Math.abs(_projTmp.y) < 0.33 && _projTmp.z < 1) {
+          fireTarget = locked;
+        }
+      }
+    }
+    if (tryFireWeapon(player, boltPool, now, undefined, fireTarget)) {
       state.sound.playerShoot();
     }
   }
