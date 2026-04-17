@@ -1,5 +1,5 @@
 // ── Bow Tie Boss AI (Level 2) ────────────────────────────
-// Fast committed breaks, tight tracking, quick re-engage.
+// Fast committed breaks + steering smoothing.
 
 import * as THREE from 'three';
 import { Ship3D } from '../../entities/Ship3D';
@@ -19,6 +19,8 @@ export class BowTieBehavior3D implements AIBehavior3D {
   private seed = 5.43;
   private evadeYaw = 0;
   private evadePitch = 0;
+  private prevYaw = 0;
+  private prevPitch = 0;
 
   private _interceptPt = new THREE.Vector3();
   private _tmpVec = new THREE.Vector3();
@@ -51,13 +53,9 @@ export class BowTieBehavior3D implements AIBehavior3D {
         if (dist < engageRange && facing > 0.3) this._setPhase('engage');
         break;
       case 'engage':
-        if (facing < -0.3 && dist < 80) {
-          this._setPhase('overshoot');
-        } else if (this.phaseTimer > this.phaseDuration || dist > leashRange * 0.7) {
-          this._setPhase('evade');
-        } else if (facing < -0.15) {
-          this._setPhase('evade');
-        }
+        if (facing < -0.3 && dist < 80) this._setPhase('overshoot');
+        else if (this.phaseTimer > this.phaseDuration || dist > leashRange * 0.7) this._setPhase('evade');
+        else if (facing < -0.15) this._setPhase('evade');
         break;
       case 'overshoot':
         if (this.phaseTimer > this.phaseDuration) this._setPhase('chase');
@@ -68,6 +66,7 @@ export class BowTieBehavior3D implements AIBehavior3D {
     }
 
     let yaw = 0, pitch = 0, thrust = 0.7, fire = false;
+    let smooth = true;
 
     switch (this.phase) {
       case 'chase': {
@@ -101,12 +100,17 @@ export class BowTieBehavior3D implements AIBehavior3D {
         yaw = this.evadeYaw;
         pitch = this.evadePitch;
         thrust = this.phaseTimer < 1.0 ? 1.0 : 0.5;
-        if (dist < engageRange && facing > this.cfg.fireCone + 0.1) {
-          if (now - self.lastFireTime >= this.fireRate * 1.5) fire = true;
-        }
+        smooth = false;
         break;
       }
     }
+
+    if (smooth) {
+      yaw = yaw * 0.3 + this.prevYaw * 0.7;
+      pitch = pitch * 0.3 + this.prevPitch * 0.7;
+    }
+    this.prevYaw = yaw;
+    this.prevPitch = pitch;
 
     yaw = Math.max(-1, Math.min(1, yaw));
     pitch = Math.max(-1, Math.min(1, pitch));
@@ -123,10 +127,10 @@ export class BowTieBehavior3D implements AIBehavior3D {
       case 'engage':    this.phaseDuration = 1.5 + r * 2.0; break;
       case 'overshoot': this.phaseDuration = 0.2 + r * 0.2; break;
       case 'evade': {
-        this.phaseDuration = 2.0 + r * 1.0; // 2-3s
+        this.phaseDuration = 2.0 + r * 1.0;
         const dirSeed = chaos(this.timer * 3, this.seed);
         const dir = Math.floor((dirSeed + 1) * 4) % 8;
-        const intensity = 0.7 + a * 0.3; // BowTie is always aggressive
+        const intensity = 0.7 + a * 0.3;
         switch (dir) {
           case 0: this.evadeYaw = -intensity; this.evadePitch = 0; break;
           case 1: this.evadeYaw = intensity;  this.evadePitch = 0; break;
@@ -137,6 +141,8 @@ export class BowTieBehavior3D implements AIBehavior3D {
           case 6: this.evadeYaw = -intensity; this.evadePitch = intensity * 0.7; break;
           case 7: this.evadeYaw = intensity;  this.evadePitch = intensity * 0.7; break;
         }
+        this.prevYaw = this.evadeYaw;
+        this.prevPitch = this.evadePitch;
         break;
       }
     }

@@ -1,5 +1,5 @@
 // ── Bolo Tie Boss AI (Level 1) ───────────────────────────
-// Committed directional breaks + afterburner charge.
+// Committed breaks + afterburner + steering smoothing.
 
 import * as THREE from 'three';
 import { Ship3D } from '../../entities/Ship3D';
@@ -19,6 +19,8 @@ export class BoloTieBehavior3D implements AIBehavior3D {
   private seed = 3.71;
   private evadeYaw = 0;
   private evadePitch = 0;
+  private prevYaw = 0;
+  private prevPitch = 0;
 
   isCharging = false;
 
@@ -55,13 +57,9 @@ export class BoloTieBehavior3D implements AIBehavior3D {
         if (dist < engageRange && facing > 0.35) this._setPhase('engage');
         break;
       case 'engage':
-        if (facing < -0.3 && dist < 80) {
-          this._setPhase('overshoot');
-        } else if (this.phaseTimer > this.phaseDuration || dist > leashRange * 0.7) {
-          this._setPhase('evade');
-        } else if (facing < -0.15) {
-          this._setPhase('evade');
-        }
+        if (facing < -0.3 && dist < 80) this._setPhase('overshoot');
+        else if (this.phaseTimer > this.phaseDuration || dist > leashRange * 0.7) this._setPhase('evade');
+        else if (facing < -0.15) this._setPhase('evade');
         break;
       case 'overshoot':
         if (this.phaseTimer > this.phaseDuration) this._setPhase('chase');
@@ -72,6 +70,7 @@ export class BoloTieBehavior3D implements AIBehavior3D {
     }
 
     let yaw = 0, pitch = 0, thrust = 0.7, fire = false;
+    let smooth = true;
 
     switch (this.phase) {
       case 'chase': {
@@ -111,12 +110,17 @@ export class BoloTieBehavior3D implements AIBehavior3D {
         yaw = this.evadeYaw;
         pitch = this.evadePitch;
         thrust = this.phaseTimer < 0.8 ? 1.0 : 0.6;
-        if (dist < engageRange && facing > this.cfg.fireCone + 0.1) {
-          if (now - self.lastFireTime >= this.fireRate * 1.5) fire = true;
-        }
+        smooth = false;
         break;
       }
     }
+
+    if (smooth) {
+      yaw = yaw * 0.3 + this.prevYaw * 0.7;
+      pitch = pitch * 0.3 + this.prevPitch * 0.7;
+    }
+    this.prevYaw = yaw;
+    this.prevPitch = pitch;
 
     yaw = Math.max(-1, Math.min(1, yaw));
     pitch = Math.max(-1, Math.min(1, pitch));
@@ -148,6 +152,8 @@ export class BoloTieBehavior3D implements AIBehavior3D {
           case 6: this.evadeYaw = -intensity; this.evadePitch = intensity * 0.7; break;
           case 7: this.evadeYaw = intensity;  this.evadePitch = intensity * 0.7; break;
         }
+        this.prevYaw = this.evadeYaw;
+        this.prevPitch = this.evadePitch;
         break;
       }
     }

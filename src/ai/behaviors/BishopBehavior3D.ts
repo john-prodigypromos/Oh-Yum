@@ -1,5 +1,5 @@
 // ── Bishop Boss AI (Level 3) ─────────────────────────────
-// Committed directional breaks + HP-gated escalation + drones.
+// Committed breaks + HP escalation + drones + steering smoothing.
 
 import * as THREE from 'three';
 import { Ship3D } from '../../entities/Ship3D';
@@ -21,6 +21,8 @@ export class BishopBehavior3D implements AIBehavior3D {
   private bossPhase: BossPhase = 'phase1';
   private evadeYaw = 0;
   private evadePitch = 0;
+  private prevYaw = 0;
+  private prevPitch = 0;
 
   dronesRequested = 0;
   droneRespawnTimer = 0;
@@ -51,9 +53,8 @@ export class BishopBehavior3D implements AIBehavior3D {
     const facing = forward.dot(toPlayer);
     const engageRange = leashRange * 0.5;
 
-    if (hpPct <= 0.2 && this.bossPhase !== 'phase3') {
-      this.bossPhase = 'phase3';
-    } else if (hpPct <= 0.5 && this.bossPhase === 'phase1') {
+    if (hpPct <= 0.2 && this.bossPhase !== 'phase3') this.bossPhase = 'phase3';
+    else if (hpPct <= 0.5 && this.bossPhase === 'phase1') {
       this.bossPhase = 'phase2';
       this.dronesRequested = 2;
     }
@@ -71,13 +72,9 @@ export class BishopBehavior3D implements AIBehavior3D {
         if (dist < engageRange && facing > 0.35) this._setPhase('engage');
         break;
       case 'engage':
-        if (facing < -0.3 && dist < 80) {
-          this._setPhase('overshoot');
-        } else if (this.phaseTimer > this.phaseDuration || dist > leashRange * 0.7) {
-          this._setPhase('evade');
-        } else if (facing < -0.15) {
-          this._setPhase('evade');
-        }
+        if (facing < -0.3 && dist < 80) this._setPhase('overshoot');
+        else if (this.phaseTimer > this.phaseDuration || dist > leashRange * 0.7) this._setPhase('evade');
+        else if (facing < -0.15) this._setPhase('evade');
         break;
       case 'overshoot':
         if (this.phaseTimer > this.phaseDuration) this._setPhase('chase');
@@ -88,6 +85,7 @@ export class BishopBehavior3D implements AIBehavior3D {
     }
 
     let yaw = 0, pitch = 0, thrust = 0.7, fire = false;
+    let smooth = true;
 
     switch (this.phase) {
       case 'chase': {
@@ -121,12 +119,17 @@ export class BishopBehavior3D implements AIBehavior3D {
         yaw = this.evadeYaw;
         pitch = this.evadePitch;
         thrust = this.phaseTimer < 1.0 ? 1.0 : 0.5;
-        if (dist < engageRange && facing > this.cfg.fireCone + 0.1) {
-          if (now - self.lastFireTime >= this.fireRate * 1.5) fire = true;
-        }
+        smooth = false;
         break;
       }
     }
+
+    if (smooth) {
+      yaw = yaw * 0.3 + this.prevYaw * 0.7;
+      pitch = pitch * 0.3 + this.prevPitch * 0.7;
+    }
+    this.prevYaw = yaw;
+    this.prevPitch = pitch;
 
     yaw = Math.max(-1, Math.min(1, yaw));
     pitch = Math.max(-1, Math.min(1, pitch));
@@ -144,7 +147,7 @@ export class BishopBehavior3D implements AIBehavior3D {
       case 'engage':    this.phaseDuration = (1.5 + r * 1.5) * berserk; break;
       case 'overshoot': this.phaseDuration = (0.2 + r * 0.2) * berserk; break;
       case 'evade': {
-        this.phaseDuration = (2.0 + r * 1.5) * berserk; // shorter in phase 3
+        this.phaseDuration = (2.0 + r * 1.5) * berserk;
         const dirSeed = chaos(this.timer * 3, this.seed);
         const dir = Math.floor((dirSeed + 1) * 4) % 8;
         const intensity = 0.7 + a * 0.3;
@@ -158,6 +161,8 @@ export class BishopBehavior3D implements AIBehavior3D {
           case 6: this.evadeYaw = -intensity; this.evadePitch = intensity * 0.7; break;
           case 7: this.evadeYaw = intensity;  this.evadePitch = intensity * 0.7; break;
         }
+        this.prevYaw = this.evadeYaw;
+        this.prevPitch = this.evadePitch;
         break;
       }
     }
