@@ -1,11 +1,11 @@
 // ── Bow Tie Boss AI (Level 2) ────────────────────────────
-// Fast darting dogfighter — tightest turns, quickest transitions.
+// Fast committed breaks, tight tracking, quick re-engage.
 
 import * as THREE from 'three';
 import { Ship3D } from '../../entities/Ship3D';
 import type { AIBehavior3D, AIConfig } from '../AIBehavior3D';
 import type { ShipInput } from '../../systems/PhysicsSystem3D';
-import { steerToward, steerAway, leadIntercept, chaos, jinkOverlay } from '../Steering';
+import { steerToward, steerAway, leadIntercept, chaos } from '../Steering';
 
 type Phase = 'chase' | 'engage' | 'overshoot' | 'evade';
 
@@ -17,7 +17,8 @@ export class BowTieBehavior3D implements AIBehavior3D {
   private phaseDuration = 0;
   private timer = 0;
   private seed = 5.43;
-  private breakDir = 1;
+  private evadeYaw = 0;
+  private evadePitch = 0;
 
   private _interceptPt = new THREE.Vector3();
   private _tmpVec = new THREE.Vector3();
@@ -36,7 +37,7 @@ export class BowTieBehavior3D implements AIBehavior3D {
     this.timer += dt;
     this.phaseTimer += dt;
 
-    const { sensitivity, aggression, leashRange } = this.cfg;
+    const { sensitivity, leashRange } = this.cfg;
     const dist = self.position.distanceTo(target.position);
     const forward = self.getForward();
     const toPlayer = this._tmpVec.subVectors(target.position, self.position).normalize();
@@ -53,10 +54,8 @@ export class BowTieBehavior3D implements AIBehavior3D {
         if (facing < -0.3 && dist < 80) {
           this._setPhase('overshoot');
         } else if (this.phaseTimer > this.phaseDuration || dist > leashRange * 0.7) {
-          this.breakDir *= -1;
           this._setPhase('evade');
         } else if (facing < -0.15) {
-          this.breakDir *= -1;
           this._setPhase('evade');
         }
         break;
@@ -64,11 +63,7 @@ export class BowTieBehavior3D implements AIBehavior3D {
         if (this.phaseTimer > this.phaseDuration) this._setPhase('chase');
         break;
       case 'evade':
-        if (facing > 0.45 && dist < engageRange) {
-          this._setPhase('engage');
-        } else if (this.phaseTimer > this.phaseDuration) {
-          this._setPhase('chase');
-        }
+        if (this.phaseTimer > this.phaseDuration) this._setPhase('chase');
         break;
     }
 
@@ -79,7 +74,7 @@ export class BowTieBehavior3D implements AIBehavior3D {
         leadIntercept(self.position, target.position, target.velocity, 120, this._interceptPt);
         const steer = steerToward(self, this._interceptPt, sensitivity * 1.4, 0.5);
         yaw = steer.yaw; pitch = steer.pitch;
-        thrust = facing > 0.3 ? 1.0 : 0.35 + chaos(this.timer, this.seed) * 0.25;
+        thrust = facing > 0.3 ? 1.0 : 0.4;
         if (dist < engageRange * 1.3 && facing > this.cfg.fireCone) {
           if (now - self.lastFireTime >= this.fireRate * 0.7) fire = true;
         }
@@ -87,9 +82,6 @@ export class BowTieBehavior3D implements AIBehavior3D {
       }
       case 'engage': {
         leadIntercept(self.position, target.position, target.velocity, 130, this._interceptPt);
-        const weave = chaos(this.timer * 2.5, this.seed) * 12 * aggression;
-        this._interceptPt.x += weave;
-        this._interceptPt.y += chaos(this.timer * 1.8, this.seed * 2) * 8 * aggression;
         const steer = steerToward(self, this._interceptPt, sensitivity * 1.5, 0.6);
         yaw = steer.yaw; pitch = steer.pitch;
         thrust = 1.0;
@@ -100,42 +92,53 @@ export class BowTieBehavior3D implements AIBehavior3D {
       }
       case 'overshoot': {
         const steer = steerAway(self, target.position, sensitivity * 1.1, 0.5, 0);
-        yaw = steer.yaw; pitch = steer.pitch - 0.6;
+        yaw = steer.yaw; pitch = steer.pitch - 0.5;
         pitch = Math.max(-1, Math.min(1, pitch));
         thrust = 0.4;
         break;
       }
       case 'evade': {
-        // Very sharp breaks — high lateral, vertical snap, speed burst
-        const steer = steerAway(self, target.position, sensitivity * 1.5, 0.5, this.breakDir * 1.4);
-        yaw = steer.yaw;
-        pitch = steer.pitch + this.breakDir * 0.7;
-        pitch = Math.max(-1, Math.min(1, pitch));
-        const evadePhase = this.phaseTimer / Math.max(0.01, this.phaseDuration);
-        thrust = evadePhase < 0.35 ? 1.0 : 0.3;
+        yaw = this.evadeYaw;
+        pitch = this.evadePitch;
+        thrust = this.phaseTimer < 1.0 ? 1.0 : 0.5;
+        if (dist < engageRange && facing > this.cfg.fireCone + 0.1) {
+          if (now - self.lastFireTime >= this.fireRate * 1.5) fire = true;
+        }
         break;
       }
     }
 
-    const jinkBase = this.phase === 'evade' ? 1.0 : (0.2 + aggression * 0.4);
-    const jink = jinkOverlay(this.timer, this.seed, this.cfg.jinkIntensity * jinkBase);
-    yaw += jink.yaw; pitch += jink.pitch;
     yaw = Math.max(-1, Math.min(1, yaw));
     pitch = Math.max(-1, Math.min(1, pitch));
-
     return { yaw, pitch, roll: -yaw * 0.6, thrust, fire };
   }
 
   private _setPhase(phase: Phase): void {
     this.phase = phase;
     this.phaseTimer = 0;
-    const aggrScale = 1 - this.cfg.aggression * 0.6;
+    const a = this.cfg.aggression;
     const r = (chaos(this.timer, this.seed) + 1) * 0.5;
     switch (phase) {
       case 'chase':     this.phaseDuration = 5; break;
-      case 'engage':    this.phaseDuration = (1.5 + r * 1.5) * aggrScale; break;
-      case 'overshoot': this.phaseDuration = 0.15 + r * 0.2; break;
-      case 'evade':     this.phaseDuration = (0.2 + r * 0.3) * aggrScale; break;
+      case 'engage':    this.phaseDuration = 1.5 + r * 2.0; break;
+      case 'overshoot': this.phaseDuration = 0.2 + r * 0.2; break;
+      case 'evade': {
+        this.phaseDuration = 2.0 + r * 1.0; // 2-3s
+        const dirSeed = chaos(this.timer * 3, this.seed);
+        const dir = Math.floor((dirSeed + 1) * 4) % 8;
+        const intensity = 0.7 + a * 0.3; // BowTie is always aggressive
+        switch (dir) {
+          case 0: this.evadeYaw = -intensity; this.evadePitch = 0; break;
+          case 1: this.evadeYaw = intensity;  this.evadePitch = 0; break;
+          case 2: this.evadeYaw = 0;          this.evadePitch = -intensity; break;
+          case 3: this.evadeYaw = 0;          this.evadePitch = intensity; break;
+          case 4: this.evadeYaw = -intensity; this.evadePitch = -intensity * 0.7; break;
+          case 5: this.evadeYaw = intensity;  this.evadePitch = -intensity * 0.7; break;
+          case 6: this.evadeYaw = -intensity; this.evadePitch = intensity * 0.7; break;
+          case 7: this.evadeYaw = intensity;  this.evadePitch = intensity * 0.7; break;
+        }
+        break;
+      }
     }
   }
 }

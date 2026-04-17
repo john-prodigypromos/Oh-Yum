@@ -1,12 +1,12 @@
 // ── Rusty AI (Grunt Dogfighter) ──────────────────────────
-// Top Gun chase-and-evade. Sharp snap turns, speed variation,
-// aggressive lateral movement. Difficulty-driven via AIConfig.
+// Top Gun dogfighting: committed directional breaks lasting
+// 2-3 seconds, speed changes, hard lateral/vertical moves.
 
 import * as THREE from 'three';
 import { Ship3D } from '../../entities/Ship3D';
 import type { AIBehavior3D, AIConfig } from '../AIBehavior3D';
 import type { ShipInput } from '../../systems/PhysicsSystem3D';
-import { steerToward, steerAway, leadIntercept, chaos, jinkOverlay } from '../Steering';
+import { steerToward, steerAway, leadIntercept, chaos } from '../Steering';
 
 let enemyIndex = 0;
 
@@ -21,7 +21,10 @@ export class RustyBehavior3D implements AIBehavior3D {
   private timer = 0;
   private idx: number;
   private seed: number;
-  private breakDir: number;
+
+  // Evade direction — committed for full evade phase
+  private evadeYaw = 0;
+  private evadePitch = 0;
 
   private _interceptPt = new THREE.Vector3();
   private _tmpVec = new THREE.Vector3();
@@ -38,7 +41,6 @@ export class RustyBehavior3D implements AIBehavior3D {
     this.seed = this.idx * 2.17;
     this.timer = this.idx * 2.5;
     this.phaseTimer = this.idx * 0.8;
-    this.breakDir = this.idx % 2 === 0 ? 1 : -1;
     this._setPhase('chase');
   }
 
@@ -63,39 +65,26 @@ export class RustyBehavior3D implements AIBehavior3D {
 
     switch (this.phase) {
       case 'chase':
-        if (dist < engageRange && facing > 0.35) {
-          this._setPhase('engage');
-        }
+        if (dist < engageRange && facing > 0.35) this._setPhase('engage');
         break;
       case 'engage':
         if (facing < -0.3 && dist < 80) {
           this._setPhase('overshoot');
         } else if (this.phaseTimer > this.phaseDuration || dist > leashRange * 0.7) {
-          this.breakDir *= -1;
           this._setPhase('evade');
         } else if (facing < -0.15) {
-          this.breakDir *= -1;
           this._setPhase('evade');
         }
         break;
       case 'overshoot':
-        if (this.phaseTimer > this.phaseDuration) {
-          this._setPhase('chase');
-        }
+        if (this.phaseTimer > this.phaseDuration) this._setPhase('chase');
         break;
       case 'evade':
-        if (facing > 0.5 && dist < engageRange) {
-          this._setPhase('engage');
-        } else if (this.phaseTimer > this.phaseDuration) {
-          this._setPhase('chase');
-        }
+        if (this.phaseTimer > this.phaseDuration) this._setPhase('chase');
         break;
     }
 
-    let yaw = 0;
-    let pitch = 0;
-    let thrust = 0.7;
-    let fire = false;
+    let yaw = 0, pitch = 0, thrust = 0.7, fire = false;
 
     switch (this.phase) {
       case 'chase': {
@@ -104,19 +93,14 @@ export class RustyBehavior3D implements AIBehavior3D {
         const steer = steerToward(self, this._interceptPt, sensitivity * 1.2, 0.5);
         yaw = steer.yaw;
         pitch = steer.pitch;
-        // Speed variation — burst when aligned, coast when turning
-        thrust = facing > 0.3 ? 1.0 : 0.4 + chaos(this.timer, this.seed) * 0.2;
+        thrust = facing > 0.3 ? 1.0 : 0.5;
         if (dist < engageRange * 1.3 && facing > this.cfg.fireCone) {
           if (now - self.lastFireTime >= this.fireRate) fire = true;
         }
         break;
       }
-
       case 'engage': {
         leadIntercept(self.position, target.position, target.velocity, 120, this._interceptPt);
-        // Lateral weave during firing run for harder tracking
-        const weave = chaos(this.timer * 2, this.seed) * 8 * aggression;
-        this._interceptPt.x += weave;
         const steer = steerToward(self, this._interceptPt, sensitivity * 1.4, 0.6);
         yaw = steer.yaw;
         pitch = steer.pitch;
@@ -126,34 +110,28 @@ export class RustyBehavior3D implements AIBehavior3D {
         }
         break;
       }
-
       case 'overshoot': {
         const steer = steerAway(self, target.position, sensitivity, 0.5, 0);
         yaw = steer.yaw;
-        pitch = steer.pitch - 0.6;
+        pitch = steer.pitch - 0.5;
         pitch = Math.max(-1, Math.min(1, pitch));
         thrust = 0.4;
         break;
       }
-
       case 'evade': {
-        // Sharp, aggressive break — high lateral bias, vertical snap, speed bursts
-        const steer = steerAway(self, target.position, sensitivity * 1.3, 0.6, this.breakDir * 1.2);
-        yaw = steer.yaw;
-        pitch = steer.pitch + this.breakDir * 0.6;
-        pitch = Math.max(-1, Math.min(1, pitch));
-        // Speed variation during evade — burst then slow for unpredictable movement
-        const evadePhase = this.phaseTimer / Math.max(0.01, this.phaseDuration);
-        thrust = evadePhase < 0.4 ? 1.0 : 0.4;
+        // COMMITTED directional break — hold one direction for the full phase
+        // No wiggling. Hard left, hard right, hard up, hard down, or diagonal.
+        yaw = this.evadeYaw;
+        pitch = this.evadePitch;
+        // Speed burst at start, then moderate
+        thrust = this.phaseTimer < 0.8 ? 1.0 : 0.6;
+        // Opportunistic fire during break if aligned
+        if (dist < engageRange && facing > this.cfg.fireCone + 0.1) {
+          if (now - self.lastFireTime >= this.fireRate * 1.5) fire = true;
+        }
         break;
       }
     }
-
-    // Jink — scales with difficulty, present in all phases but heavier in evade
-    const jinkBase = this.phase === 'evade' ? 1.0 : (0.15 + aggression * 0.35);
-    const jink = jinkOverlay(this.timer, this.seed, this.cfg.jinkIntensity * jinkBase);
-    yaw += jink.yaw;
-    pitch += jink.pitch;
 
     yaw = Math.max(-1, Math.min(1, yaw));
     pitch = Math.max(-1, Math.min(1, pitch));
@@ -166,14 +144,38 @@ export class RustyBehavior3D implements AIBehavior3D {
     this.phase = phase;
     this.phaseTimer = 0;
     const a = this.cfg.aggression;
-    const aggrScale = 1 - a * 0.6; // much bigger effect: beginner 0.88, expert 0.4
-    const r = (chaos(this.timer, this.seed) + 1) * 0.5;
+    const r = (chaos(this.timer, this.seed) + 1) * 0.5; // 0-1
 
     switch (phase) {
-      case 'chase':     this.phaseDuration = 5; break;
-      case 'engage':    this.phaseDuration = (1.2 + r * 1.5) * aggrScale; break;
-      case 'overshoot': this.phaseDuration = 0.2 + r * 0.25; break;
-      case 'evade':     this.phaseDuration = (0.3 + r * 0.5) * aggrScale; break;
+      case 'chase':
+        this.phaseDuration = 5;
+        break;
+      case 'engage':
+        this.phaseDuration = 1.5 + r * 2.0; // 1.5-3.5s
+        break;
+      case 'overshoot':
+        this.phaseDuration = 0.3 + r * 0.3;
+        break;
+      case 'evade':
+        // 2-3 seconds of committed directional break
+        this.phaseDuration = 2.0 + r * 1.5; // 2.0-3.5s
+
+        // Pick a committed direction — hard left/right/up/down/diagonal
+        // Use chaos for deterministic variety, pick from 8 cardinal directions
+        const dirSeed = chaos(this.timer * 3, this.seed);
+        const dir = Math.floor((dirSeed + 1) * 4) % 8; // 0-7
+        const intensity = 0.6 + a * 0.4; // beginner: 0.68, expert: 1.0
+        switch (dir) {
+          case 0: this.evadeYaw = -intensity; this.evadePitch = 0; break;           // hard left
+          case 1: this.evadeYaw = intensity;  this.evadePitch = 0; break;           // hard right
+          case 2: this.evadeYaw = 0;          this.evadePitch = -intensity; break;  // hard up
+          case 3: this.evadeYaw = 0;          this.evadePitch = intensity; break;   // hard down
+          case 4: this.evadeYaw = -intensity; this.evadePitch = -intensity * 0.7; break; // up-left
+          case 5: this.evadeYaw = intensity;  this.evadePitch = -intensity * 0.7; break; // up-right
+          case 6: this.evadeYaw = -intensity; this.evadePitch = intensity * 0.7; break;  // down-left
+          case 7: this.evadeYaw = intensity;  this.evadePitch = intensity * 0.7; break;  // down-right
+        }
+        break;
     }
   }
 }

@@ -428,9 +428,19 @@ export class HUD3D {
       }
 
       const isLocked = i === lockedTargetIndex;
-      const borderColor = isLocked ? '#00d4ff' : '#ff4444';
-      const glowColor = isLocked ? 'rgba(0,212,255,0.6)' : 'rgba(255,0,0,0.5)';
-      const textColor = isLocked ? '#00d4ff' : '#ff4444';
+      // Only show lock styling if target is within center 33% of screen
+      const inLockZone = isLocked && Math.abs(pos.x) < 0.33 && Math.abs(pos.y) < 0.33;
+      const borderColor = inLockZone ? '#00d4ff' : '#ff4444';
+      const glowColor = inLockZone ? 'rgba(0,212,255,0.6)' : 'rgba(255,0,0,0.5)';
+      const textColor = inLockZone ? '#00d4ff' : '#ff4444';
+
+      // Scale indicator based on distance — smaller at range so it doesn't obscure the ship
+      const onScreenDist = Math.round(enemy.position.distanceTo(player.position));
+      const distScale = Math.max(0.3, Math.min(1.0, 60 / Math.max(onScreenDist, 1)));
+      const portraitSize = Math.round(54 * distScale);
+      const barWidth = Math.round(54 * distScale);
+      const fontSize = Math.max(7, Math.round(10 * distScale));
+      const showDetails = distScale > 0.4;
 
       const hud = document.createElement('div');
       hud.style.cssText = `
@@ -438,54 +448,63 @@ export class HUD3D {
         left:${sx}px;top:${sy}px;transform:translate(-50%,-50%);
       `;
 
-      // Portrait (centered, stacked vertically)
-      const portraitFile = ENEMY_PORTRAITS[i];
-      if (portraitFile) {
-        const img = document.createElement('img');
-        img.src = `/portraits/${portraitFile}`;
-        img.style.cssText = `width:54px;height:54px;border-radius:50%;object-fit:cover;border:2px solid ${borderColor};filter:drop-shadow(0 0 6px ${glowColor});display:block;margin:0 auto;`;
-        hud.appendChild(img);
-      }
+      if (showDetails) {
+        // Portrait (scaled by distance)
+        const portraitFile = ENEMY_PORTRAITS[i];
+        if (portraitFile) {
+          const img = document.createElement('img');
+          img.src = `/portraits/${portraitFile}`;
+          img.style.cssText = `width:${portraitSize}px;height:${portraitSize}px;border-radius:50%;object-fit:cover;border:2px solid ${borderColor};filter:drop-shadow(0 0 ${Math.round(6 * distScale)}px ${glowColor});display:block;margin:0 auto;`;
+          hud.appendChild(img);
+        }
 
-      // Lock indicator bracket
-      if (isLocked) {
-        const lockTag = document.createElement('div');
-        lockTag.textContent = 'LOCKED';
-        lockTag.style.cssText = `
-          font-size:9px;font-weight:700;color:#00d4ff;font-family:var(--font-display);
-          letter-spacing:2px;margin-bottom:2px;
-          text-shadow:0 0 6px rgba(0,212,255,0.5);
+        // Lock indicator — only when in center 33%
+        if (inLockZone) {
+          const lockTag = document.createElement('div');
+          lockTag.textContent = 'LOCKED';
+          lockTag.style.cssText = `
+            font-size:${Math.max(7, Math.round(9 * distScale))}px;font-weight:700;color:#00d4ff;font-family:var(--font-display);
+            letter-spacing:2px;margin-bottom:2px;
+            text-shadow:0 0 6px rgba(0,212,255,0.5);
+          `;
+          hud.insertBefore(lockTag, hud.firstChild);
+        }
+
+        // Health bar
+        const barBg = document.createElement('div');
+        barBg.style.cssText = `
+          width:${barWidth}px;height:${Math.max(3, Math.round(6 * distScale))}px;background:rgba(0,0,0,0.7);
+          border:1px solid ${borderColor};border-radius:2px;overflow:hidden;
+          margin:${Math.round(4 * distScale)}px auto 0;
         `;
-        hud.insertBefore(lockTag, hud.firstChild);
+        const barFill = document.createElement('div');
+        const hpPct = Math.max(0, (1 - enemy.damagePct) * 100);
+        barFill.style.cssText = `
+          width:${hpPct}%;height:100%;
+          background:linear-gradient(90deg, ${inLockZone ? '#0088aa' : '#cc0000'}, ${inLockZone ? '#00d4ff' : '#ff4444'});
+        `;
+        barBg.appendChild(barFill);
+        hud.appendChild(barBg);
+
+        // Name + distance
+        const label = document.createElement('div');
+        label.textContent = `${ENEMY_NAMES[i] ?? `ENEMY ${i + 1}`} [${onScreenDist}m]`;
+        label.style.cssText = `
+          font-size:${fontSize}px;font-weight:bold;color:${textColor};font-family:var(--font-body);
+          letter-spacing:1px;margin-top:2px;
+          text-shadow:0 0 4px ${glowColor};
+        `;
+        hud.appendChild(label);
+      } else {
+        // At extreme distance — just a small diamond marker
+        const marker = document.createElement('div');
+        marker.style.cssText = `
+          width:8px;height:8px;background:${borderColor};
+          transform:rotate(45deg);margin:0 auto;
+          box-shadow:0 0 6px ${glowColor};
+        `;
+        hud.appendChild(marker);
       }
-
-      // Health bar directly under portrait
-      const barBg = document.createElement('div');
-      barBg.style.cssText = `
-        width:54px;height:6px;background:rgba(0,0,0,0.7);
-        border:1px solid ${borderColor};border-radius:2px;overflow:hidden;
-        margin:4px auto 0;
-      `;
-      const barFill = document.createElement('div');
-      const hpPct = Math.max(0, (1 - enemy.damagePct) * 100);
-      barFill.style.cssText = `
-        width:${hpPct}%;height:100%;
-        background:linear-gradient(90deg, ${isLocked ? '#0088aa' : '#cc0000'}, ${isLocked ? '#00d4ff' : '#ff4444'});
-        transition:width 0.1s ease-out;
-      `;
-      barBg.appendChild(barFill);
-      hud.appendChild(barBg);
-
-      // Name + distance label
-      const onScreenDist = Math.round(enemy.position.distanceTo(player.position));
-      const label = document.createElement('div');
-      label.textContent = `${ENEMY_NAMES[i] ?? `ENEMY ${i + 1}`} [${onScreenDist}m]`;
-      label.style.cssText = `
-        font-size:10px;font-weight:bold;color:${textColor};font-family:var(--font-body);
-        letter-spacing:1px;margin-top:2px;
-        text-shadow:0 0 4px ${glowColor};
-      `;
-      hud.appendChild(label);
 
       this.container.appendChild(hud);
       this.enemyHUDs.push(hud);
