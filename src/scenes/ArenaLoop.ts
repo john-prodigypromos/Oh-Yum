@@ -85,6 +85,8 @@ export interface ArenaState {
   slowMoFired: boolean;
   // Target lock — index into enemies array, -1 = no lock
   lockedTargetIndex: number;
+  // Grace period — enemies don't engage for the first few seconds
+  roundStartTime: number;
 }
 
 export function createArenaState(
@@ -251,6 +253,7 @@ export function createArenaState(
     paused: false,
     slowMoFired: false,
     lockedTargetIndex: -1,
+    roundStartTime: performance.now(),
   };
 }
 
@@ -359,11 +362,20 @@ export function updateArena(
   // ── Enemy AI + weapons + hard distance leash ──
   const LEASH_DIST = 200;   // max allowed distance from player
   const LEASH_FORCE = 300;  // pull strength when beyond leash
+  const GRACE_PERIOD = 3500; // ms of peace before enemies engage
+  const graceActive = (now - state.roundStartTime) < GRACE_PERIOD;
   for (let i = 0; i < enemies.length; i++) {
     const enemy = enemies[i];
     if (!enemy.alive) continue;
 
     const aiInput = enemyAIs[i].update(enemy, player, effectiveDt, now);
+    // During grace period: no firing, cruise straight (no pursuit)
+    if (graceActive) {
+      aiInput.fire = false;
+      aiInput.thrust = 0.3; // gentle cruise
+      aiInput.yaw *= 0.2;   // minimal steering — lazy drift
+      aiInput.pitch *= 0.2;
+    }
     if (aiInput.fire) {
       if (tryFireWeapon(enemy, boltPool, now, undefined, player)) {
         state.sound.enemyShoot();
@@ -568,8 +580,9 @@ export function updateArena(
     if (vid) tauntCallback(vid, 'onSpawn');
   }
 
-  // ── Ship-to-ship collisions ──
+  // ── Ship-to-ship collisions (skip during grace period) ──
   for (let ci = 0; ci < enemies.length; ci++) {
+    if (graceActive) break;
     const enemy = enemies[ci];
     if (!enemy.alive) continue;
     if (checkShipCollision(player, enemy, SHIP.HITBOX_RADIUS)) {

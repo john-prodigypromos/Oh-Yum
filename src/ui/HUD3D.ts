@@ -39,6 +39,18 @@ export class HUD3D {
   private tauntTypewriterText = '';
   private tauntTypewriterIdx = 0;
   private tauntTypewriterTimer = 0;
+  // Lock bracket overlay — persistent element wrapping portrait + brackets
+  private lockOverlay: HTMLDivElement = null!;
+  private lockScaler: HTMLDivElement = null!;
+  private lockRing: HTMLDivElement = null!;
+  private lockText: HTMLDivElement = null!;
+  private lockPortrait: HTMLImageElement = null!;
+  private lockBarFill: HTMLDivElement = null!;
+  private lockBarBg: HTMLDivElement = null!;
+  private lockInfo: HTMLDivElement = null!;
+  private lockFlash: HTMLDivElement = null!;
+  private wasInLockZone = false;
+  private lockedEnemyIdx = -1;
   private altitudeEl: HTMLDivElement;
   private descentRateEl: HTMLDivElement;
   private landingStatusEl: HTMLDivElement;
@@ -123,6 +135,66 @@ export class HUD3D {
         backdrop-filter:blur(8px);
       }
       .taunt-popup.visible { opacity:1; }
+
+      /* ── Lock bracket overlay ── */
+      .lock-overlay {
+        position:fixed;pointer-events:none;z-index:23;
+        transform:translate(-50%,-50%);
+      }
+      .lock-scaler {
+        transition:transform 0.25s ease-out, opacity 0.25s ease-out;
+      }
+      .lock-ring {
+        position:relative;
+        animation:lockSpin 8s linear infinite;
+      }
+      .lock-corner {
+        position:absolute;width:30%;height:30%;
+        border-color:#00ff66;border-style:solid;
+        filter:drop-shadow(0 0 6px rgba(0,255,102,0.8));
+      }
+      .lock-corner.tl { top:0;left:0;border-width:2px 0 0 2px; }
+      .lock-corner.tr { top:0;right:0;border-width:2px 2px 0 0; }
+      .lock-corner.bl { bottom:0;left:0;border-width:0 0 2px 2px; }
+      .lock-corner.br { bottom:0;right:0;border-width:0 2px 2px 0; }
+      .lock-portrait {
+        position:absolute;top:50%;left:50%;
+        transform:translate(-50%,-50%);
+        border-radius:50%;object-fit:cover;
+        border:2px solid #00ff66;
+        filter:drop-shadow(0 0 8px rgba(0,255,102,0.6));
+      }
+      .lock-text {
+        text-align:center;margin-bottom:4px;
+        font-family:var(--font-display);font-size:10px;font-weight:700;
+        color:#00ff66;letter-spacing:3px;
+        text-shadow:0 0 8px rgba(0,255,102,0.6);
+        animation:lockPulse 1.5s ease-in-out infinite;
+      }
+      .lock-bar-bg {
+        background:rgba(0,0,0,0.7);border:1px solid #00ff66;
+        border-radius:2px;overflow:hidden;margin:4px auto 0;
+      }
+      .lock-bar-fill {
+        height:100%;
+        background:linear-gradient(90deg, #008844, #00ff66);
+        transition:width 0.15s ease-out;
+      }
+      .lock-info {
+        text-align:center;margin-top:2px;
+        font-size:10px;font-weight:bold;color:#00ff66;
+        font-family:var(--font-body);letter-spacing:1px;
+        text-shadow:0 0 4px rgba(0,255,102,0.6);
+      }
+      .lock-flash {
+        position:fixed;top:0;left:0;width:100%;height:100%;
+        pointer-events:none;z-index:21;
+        border:3px solid rgba(0,255,102,0.5);
+        box-shadow:inset 0 0 80px rgba(0,255,102,0.15);
+        opacity:0;transition:opacity 0.4s ease-out;
+      }
+      @keyframes lockSpin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+      @keyframes lockPulse { 0%,100%{opacity:0.6} 50%{opacity:1} }
 
       /* ── Speed lines overlay ── */
       .speed-lines {
@@ -263,6 +335,62 @@ export class HUD3D {
     this.tauntEl.appendChild(this.tauntTextEl);
     this.container.appendChild(this.tauntEl);
 
+    // ── Lock bracket overlay — portrait + brackets + info, all persistent ──
+    this.lockOverlay = document.createElement('div');
+    this.lockOverlay.className = 'lock-overlay';
+    this.lockOverlay.style.display = 'none';
+
+    this.lockScaler = document.createElement('div');
+    this.lockScaler.className = 'lock-scaler';
+
+    // "LOCK" label above everything
+    this.lockText = document.createElement('div');
+    this.lockText.className = 'lock-text';
+    this.lockText.textContent = 'LOCK';
+    this.lockScaler.appendChild(this.lockText);
+
+    // Frame container — brackets rotate around the portrait
+    const lockFrame = document.createElement('div');
+    lockFrame.style.cssText = 'position:relative;display:flex;align-items:center;justify-content:center;';
+
+    // Rotating bracket ring
+    this.lockRing = document.createElement('div');
+    this.lockRing.className = 'lock-ring';
+    for (const pos of ['tl', 'tr', 'bl', 'br']) {
+      const corner = document.createElement('div');
+      corner.className = `lock-corner ${pos}`;
+      this.lockRing.appendChild(corner);
+    }
+    lockFrame.appendChild(this.lockRing);
+
+    // Portrait — centered inside the brackets, does NOT rotate
+    this.lockPortrait = document.createElement('img');
+    this.lockPortrait.className = 'lock-portrait';
+    lockFrame.appendChild(this.lockPortrait);
+
+    this.lockScaler.appendChild(lockFrame);
+
+    // Health bar below
+    this.lockBarBg = document.createElement('div');
+    this.lockBarBg.className = 'lock-bar-bg';
+    this.lockBarFill = document.createElement('div');
+    this.lockBarFill.className = 'lock-bar-fill';
+    this.lockBarBg.appendChild(this.lockBarFill);
+    this.lockScaler.appendChild(this.lockBarBg);
+
+    // Name + distance
+    this.lockInfo = document.createElement('div');
+    this.lockInfo.className = 'lock-info';
+    this.lockScaler.appendChild(this.lockInfo);
+
+    this.lockOverlay.appendChild(this.lockScaler);
+    this.container.appendChild(this.lockOverlay);
+
+    // Green flash on lock acquire
+    this.lockFlash = document.createElement('div');
+    this.lockFlash.className = 'lock-flash';
+    this.container.appendChild(this.lockFlash);
+
     // Altitude indicator (visible during launch/landing phases)
     this.altitudeEl = document.createElement('div');
     this.altitudeEl.style.cssText = `
@@ -325,6 +453,9 @@ export class HUD3D {
     this.targetsEl.textContent = `${total - alive}/${total}`;
     this.levelEl.textContent = String(level);
 
+    // Lock bracket overlay — every frame for smooth tracking
+    this.updateLockOverlay(player, enemies, camera, lockedTargetIndex);
+
     // ── Target indicators — throttle to every 3rd frame for performance ──
     if (this.updateCounter % 3 === 0) {
       this.updateTargetIndicators(player, enemies, camera, lockedTargetIndex);
@@ -346,6 +477,9 @@ export class HUD3D {
     for (let i = 0; i < enemies.length; i++) {
       const enemy = enemies[i];
       if (!enemy.alive) continue;
+
+      // Skip this enemy if the persistent lock overlay is handling it
+      if (this.wasInLockZone && i === this.lockedEnemyIdx) continue;
 
       // Project enemy position to screen, then offset upward in screen space
       // so the label stays a consistent pixel distance above the ship at any range
@@ -430,9 +564,9 @@ export class HUD3D {
       const isLocked = i === lockedTargetIndex;
       // Only show lock styling if target is within center 33% of screen
       const inLockZone = isLocked && Math.abs(pos.x) < 0.33 && Math.abs(pos.y) < 0.33;
-      const borderColor = inLockZone ? '#00d4ff' : '#ff4444';
-      const glowColor = inLockZone ? 'rgba(0,212,255,0.6)' : 'rgba(255,0,0,0.5)';
-      const textColor = inLockZone ? '#00d4ff' : '#ff4444';
+      const borderColor = inLockZone ? '#00ff66' : '#ff4444';
+      const glowColor = inLockZone ? 'rgba(0,255,102,0.6)' : 'rgba(255,0,0,0.5)';
+      const textColor = inLockZone ? '#00ff66' : '#ff4444';
 
       // Scale indicator based on distance — smaller at range so it doesn't obscure the ship
       const onScreenDist = Math.round(enemy.position.distanceTo(player.position));
@@ -458,18 +592,6 @@ export class HUD3D {
           hud.appendChild(img);
         }
 
-        // Lock indicator — only when in center 33%
-        if (inLockZone) {
-          const lockTag = document.createElement('div');
-          lockTag.textContent = 'LOCKED';
-          lockTag.style.cssText = `
-            font-size:${Math.max(7, Math.round(9 * distScale))}px;font-weight:700;color:#00d4ff;font-family:var(--font-display);
-            letter-spacing:2px;margin-bottom:2px;
-            text-shadow:0 0 6px rgba(0,212,255,0.5);
-          `;
-          hud.insertBefore(lockTag, hud.firstChild);
-        }
-
         // Health bar
         const barBg = document.createElement('div');
         barBg.style.cssText = `
@@ -481,7 +603,7 @@ export class HUD3D {
         const hpPct = Math.max(0, (1 - enemy.damagePct) * 100);
         barFill.style.cssText = `
           width:${hpPct}%;height:100%;
-          background:linear-gradient(90deg, ${inLockZone ? '#0088aa' : '#cc0000'}, ${inLockZone ? '#00d4ff' : '#ff4444'});
+          background:linear-gradient(90deg, ${inLockZone ? '#008844' : '#cc0000'}, ${inLockZone ? '#00ff66' : '#ff4444'});
         `;
         barBg.appendChild(barFill);
         hud.appendChild(barBg);
@@ -508,6 +630,101 @@ export class HUD3D {
 
       this.container.appendChild(hud);
       this.enemyHUDs.push(hud);
+    }
+  }
+
+  private updateLockOverlay(player: Ship3D, enemies: Ship3D[], camera?: THREE.PerspectiveCamera, lockedTargetIndex = -1): void {
+    // No camera or no lock target — hide
+    if (!camera || lockedTargetIndex < 0 || lockedTargetIndex >= enemies.length) {
+      this.hideLock();
+      return;
+    }
+
+    const enemy = enemies[lockedTargetIndex];
+    if (!enemy.alive) {
+      this.hideLock();
+      return;
+    }
+
+    // Project enemy to screen — same offset as enemy HUD portrait (70px above center)
+    const pos = enemy.position.clone().project(camera);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const sx = (pos.x * 0.5 + 0.5) * w;
+    const sy = (-pos.y * 0.5 + 0.5) * h - 70;
+    const behind = pos.z > 1;
+
+    const inLockZone = !behind && Math.abs(pos.x) < 0.33 && Math.abs(pos.y) < 0.33;
+    const onScreen = !behind && sx > 30 && sx < w - 30 && sy > 30 && sy < h - 30;
+
+    if (inLockZone && onScreen) {
+      const dist = enemy.position.distanceTo(player.position);
+      const distScale = Math.max(0.3, Math.min(1.0, 60 / Math.max(dist, 1)));
+      const portraitSize = Math.round(54 * distScale);
+      const boxSize = portraitSize + Math.round(20 * distScale);
+
+      // Position and size
+      this.lockOverlay.style.left = sx + 'px';
+      this.lockOverlay.style.top = sy + 'px';
+      this.lockRing.style.width = boxSize + 'px';
+      this.lockRing.style.height = boxSize + 'px';
+      this.lockPortrait.style.width = portraitSize + 'px';
+      this.lockPortrait.style.height = portraitSize + 'px';
+      this.lockText.style.fontSize = Math.max(8, Math.round(10 * distScale)) + 'px';
+      this.lockBarBg.style.width = Math.round(54 * distScale) + 'px';
+      this.lockBarBg.style.height = Math.max(3, Math.round(6 * distScale)) + 'px';
+      this.lockInfo.style.fontSize = Math.max(7, Math.round(10 * distScale)) + 'px';
+
+      // Update portrait src if enemy changed
+      const portraitFile = ENEMY_PORTRAITS[lockedTargetIndex];
+      if (this.lockedEnemyIdx !== lockedTargetIndex && portraitFile) {
+        this.lockPortrait.src = `/portraits/${portraitFile}`;
+        this.lockedEnemyIdx = lockedTargetIndex;
+      }
+
+      // Update health bar
+      const hpPct = Math.max(0, (1 - enemy.damagePct) * 100);
+      this.lockBarFill.style.width = `${hpPct}%`;
+
+      // Update name + distance
+      const onScreenDist = Math.round(dist);
+      this.lockInfo.textContent = `${ENEMY_NAMES[lockedTargetIndex] ?? `ENEMY ${lockedTargetIndex + 1}`} [${onScreenDist}m]`;
+
+      if (!this.wasInLockZone) {
+        // ── ACQUIRE — snap in + green flash ──
+        this.lockOverlay.style.display = 'block';
+        this.lockScaler.style.transform = 'scale(1.8)';
+        this.lockScaler.style.opacity = '0';
+        void this.lockScaler.offsetWidth;
+        this.lockScaler.style.transform = 'scale(1)';
+        this.lockScaler.style.opacity = '1';
+
+        // Green edge flash
+        this.lockFlash.style.transition = 'none';
+        this.lockFlash.style.opacity = '0.7';
+        void this.lockFlash.offsetWidth;
+        this.lockFlash.style.transition = 'opacity 0.4s ease-out';
+        this.lockFlash.style.opacity = '0';
+
+        this.wasInLockZone = true;
+      }
+    } else {
+      this.hideLock();
+    }
+  }
+
+  private hideLock(): void {
+    if (this.wasInLockZone) {
+      // ── LOSE — collapse out ──
+      this.lockScaler.style.transform = 'scale(0.3)';
+      this.lockScaler.style.opacity = '0';
+      setTimeout(() => {
+        if (!this.wasInLockZone) {
+          this.lockOverlay.style.display = 'none';
+        }
+      }, 250);
+      this.wasInLockZone = false;
+      this.lockedEnemyIdx = -1;
     }
   }
 

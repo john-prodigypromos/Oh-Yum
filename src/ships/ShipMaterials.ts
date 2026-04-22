@@ -150,45 +150,39 @@ function createBrushedMetalMap(size: number, seed: number): THREE.CanvasTexture 
   return tex;
 }
 
-/** Enemy ship materials — dark gunmetal hull, red accent lighting, bright engine glow.
- *  Inspired by cinematic sci-fi fighters: dark industrial metal with menacing red strips. */
+/** Enemy ship materials — solid metallic black, mirror-shine, red accent lighting.
+ *  Piano-black stealth fighter look — no texture, pure gloss. */
 export function createEnemyMaterials(): ShipMaterialSet {
-  const { normalMap, roughnessMap } = getSharedTextures();
-
-  // Main hull — dark steel with metallic sheen
+  // Main hull — solid black, high metalness, very smooth, strong clearcoat
   const hull = new THREE.MeshPhysicalMaterial({
-    color: 0x3a3a48,
-    emissive: 0x060608,
-    emissiveIntensity: 0.2,
-    metalness: 0.9,
-    roughness: 0.25,
-    normalMap: normalMap,
-    roughnessMap: roughnessMap,
-    clearcoat: 0.5,
-    clearcoatRoughness: 0.1,
+    color: 0x080808,
+    metalness: 1.0,
+    roughness: 0.05,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.02,
+    reflectivity: 1.0,
     side: THREE.DoubleSide,
   });
 
-  // Darker armor panels — even darker for panel contrast
+  // Armor panels — same solid black, slightly different sheen
   const armorDark = new THREE.MeshPhysicalMaterial({
-    color: 0x111118,
-    metalness: 0.9,
-    roughness: 0.25,
-    normalMap: normalMap,
-    roughnessMap: roughnessMap,
-    clearcoat: 0.5,
-    clearcoatRoughness: 0.1,
+    color: 0x050505,
+    metalness: 1.0,
+    roughness: 0.08,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.03,
   });
 
-  // Cockpit slit — menacing red glow
+  // Cockpit — darker silver chrome visor
   const cockpit = new THREE.MeshPhysicalMaterial({
-    color: 0x220000,
-    emissive: 0xff1111,
-    emissiveIntensity: 2.5,
-    metalness: 0.1,
-    roughness: 0.1,
-    transmission: 0.2,
-    thickness: 0.3,
+    color: 0x8c8c99,
+    emissive: 0x40484d,
+    emissiveIntensity: 0.3,
+    metalness: 1.0,
+    roughness: 0.02,
+    clearcoat: 1.0,
+    clearcoatRoughness: 0.0,
+    reflectivity: 1.0,
   });
 
   // Red accent strip material — subtle edge lighting

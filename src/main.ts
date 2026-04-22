@@ -298,7 +298,7 @@ function showCharSelectOverlay(): void {
 
     const tag = document.createElement('div');
     tag.textContent = cfg.tagline;
-    tag.style.cssText = 'font-size:clamp(9px,2vw,11px);color:var(--text-dim);letter-spacing:0.5px;';
+    tag.style.cssText = 'font-size:clamp(9px,2vw,11px);color:rgba(200,215,230,0.85);letter-spacing:0.5px;';
     card.appendChild(tag);
 
     card.addEventListener('click', () => {
