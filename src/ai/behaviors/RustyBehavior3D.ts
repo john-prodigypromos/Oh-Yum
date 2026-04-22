@@ -1,6 +1,6 @@
 // ── Rusty AI (Grunt Dogfighter) ──────────────────────────
-// Top Gun dogfighting: committed directional breaks, smooth
-// tracking (no wiggle), speed changes.
+// Top Gun maneuvers: split-S, dive-and-pull, high-G break,
+// scissors, throttle-cut, Immelmann climb.
 
 import * as THREE from 'three';
 import { Ship3D } from '../../entities/Ship3D';
@@ -11,6 +11,7 @@ import { steerToward, steerAway, leadIntercept, chaos } from '../Steering';
 let enemyIndex = 0;
 
 type Phase = 'chase' | 'engage' | 'overshoot' | 'evade';
+type Maneuver = 'break_turn' | 'dive_pull' | 'climb_roll' | 'split_s' | 'scissors' | 'throttle_cut';
 
 export class RustyBehavior3D implements AIBehavior3D {
   private fireRate: number;
@@ -22,12 +23,9 @@ export class RustyBehavior3D implements AIBehavior3D {
   private idx: number;
   private seed: number;
 
-  private evadeYaw = 0;
-  private evadePitch = 0;
-  private evadeYaw2 = 0;
-  private evadePitch2 = 0;
+  private maneuver: Maneuver = 'break_turn';
+  private maneuverDir = 1; // +1 or -1 for left/right
 
-  // Steering smoothing — kills frame-to-frame wiggle
   private prevYaw = 0;
   private prevPitch = 0;
 
@@ -41,6 +39,7 @@ export class RustyBehavior3D implements AIBehavior3D {
     this.seed = this.idx * 2.17;
     this.timer = this.idx * 2.5;
     this.phaseTimer = this.idx * 0.8;
+    this.maneuverDir = this.idx % 2 === 0 ? 1 : -1;
     this._setPhase('chase');
   }
 
@@ -79,7 +78,7 @@ export class RustyBehavior3D implements AIBehavior3D {
     }
 
     let yaw = 0, pitch = 0, thrust = 0.7, fire = false;
-    let smooth = true; // apply smoothing to kill wiggle
+    let smooth = true;
 
     switch (this.phase) {
       case 'chase': {
@@ -106,25 +105,89 @@ export class RustyBehavior3D implements AIBehavior3D {
         break;
       }
       case 'overshoot': {
-        const steer = steerAway(self, target.position, sensitivity, 0.5, 0);
-        yaw = steer.yaw;
-        pitch = steer.pitch - 0.5;
-        pitch = Math.max(-1, Math.min(1, pitch));
-        thrust = 0.4;
+        // High-speed flyby — maintain speed, pull up
+        yaw = 0;
+        pitch = -0.7; // nose up
+        thrust = 1.0;
+        smooth = false;
         break;
       }
       case 'evade': {
-        // Two-phase evade: first direction then shift to second for curved arcs
-        const evadeProgress = this.phaseTimer / Math.max(0.01, this.phaseDuration);
-        if (evadeProgress < 0.4) {
-          yaw = this.evadeYaw;
-          pitch = this.evadePitch;
-        } else {
-          yaw = this.evadeYaw2;
-          pitch = this.evadePitch2;
-        }
-        thrust = 1.0;
         smooth = false;
+        const t = this.phaseTimer;
+        const d = this.maneuverDir;
+        const I = 0.6 + this.cfg.aggression * 0.4; // intensity
+
+        switch (this.maneuver) {
+          case 'break_turn':
+            // Sustained high-G turn in one direction — classic break
+            yaw = d * I;
+            pitch = -0.3 * I; // slight climb during break
+            thrust = 1.0;
+            break;
+
+          case 'dive_pull':
+            // Dive hard for first half, then pull up hard — altitude change
+            if (t < this.phaseDuration * 0.45) {
+              yaw = 0;
+              pitch = 0.9 * I; // nose down — dive
+              thrust = 1.0;
+            } else {
+              yaw = d * 0.3;
+              pitch = -0.9 * I; // nose up — pull out
+              thrust = 0.8;
+            }
+            break;
+
+          case 'climb_roll':
+            // Immelmann — climb hard then break to one side
+            if (t < this.phaseDuration * 0.5) {
+              yaw = 0;
+              pitch = -I; // climb
+              thrust = 1.0;
+            } else {
+              yaw = d * I; // roll into turn
+              pitch = 0;
+              thrust = 0.9;
+            }
+            break;
+
+          case 'split_s':
+            // Split-S — nose down then pull through
+            if (t < this.phaseDuration * 0.3) {
+              yaw = 0;
+              pitch = 0.8 * I; // nose down
+              thrust = 0.6;
+            } else {
+              yaw = d * 0.2;
+              pitch = -0.7 * I; // pull through
+              thrust = 1.0;
+            }
+            break;
+
+          case 'scissors':
+            // Tight alternating crosses — rapid direction changes
+            const scissorPeriod = 0.7; // switch every 0.7s
+            const scissorPhase = Math.floor(t / scissorPeriod) % 2;
+            yaw = scissorPhase === 0 ? d * I : -d * I;
+            pitch = (scissorPhase === 0 ? -0.3 : 0.3) * I;
+            thrust = 0.7;
+            break;
+
+          case 'throttle_cut':
+            // Cut throttle to force overshoot, then gun it
+            if (t < this.phaseDuration * 0.35) {
+              yaw = d * 0.3;
+              pitch = 0;
+              thrust = 0; // idle — player overshoots
+            } else {
+              yaw = d * I;
+              pitch = -0.4 * I;
+              thrust = 1.0; // burst out
+            }
+            break;
+        }
+
         if (dist < engageRange && facing > this.cfg.fireCone + 0.1) {
           if (now - self.lastFireTime >= this.fireRate * 1.5) fire = true;
         }
@@ -132,7 +195,6 @@ export class RustyBehavior3D implements AIBehavior3D {
       }
     }
 
-    // Low-pass filter on steering — blend 30% new + 70% previous to kill wiggle
     if (smooth) {
       yaw = yaw * 0.3 + this.prevYaw * 0.7;
       pitch = pitch * 0.3 + this.prevPitch * 0.7;
@@ -149,47 +211,30 @@ export class RustyBehavior3D implements AIBehavior3D {
   private _setPhase(phase: Phase): void {
     this.phase = phase;
     this.phaseTimer = 0;
-    const a = this.cfg.aggression;
     const r = (chaos(this.timer, this.seed) + 1) * 0.5;
 
     switch (phase) {
       case 'chase':     this.phaseDuration = 5; break;
       case 'engage':    this.phaseDuration = 1.5 + r * 2.0; break;
-      case 'overshoot': this.phaseDuration = 0.3 + r * 0.3; break;
+      case 'overshoot': this.phaseDuration = 0.8 + r * 0.5; break; // longer flyby
       case 'evade': {
-        this.phaseDuration = 2.0 + r * 1.5;
-        const dirSeed = chaos(this.timer * 3, this.seed);
-        // Weighted: less horizontal, more vertical
-        // 10 slots: 2 horizontal, 4 vertical, 4 diagonal (vertical-biased)
-        const dir = Math.floor((dirSeed + 1) * 5) % 10;
-        const intensity = 0.6 + a * 0.4;
-        switch (dir) {
-          case 0: this.evadeYaw = -intensity; this.evadePitch = 0; break;           // hard left
-          case 1: this.evadeYaw = intensity;  this.evadePitch = 0; break;           // hard right
-          case 2: this.evadeYaw = 0;          this.evadePitch = -intensity; break;  // hard up
-          case 3: this.evadeYaw = 0;          this.evadePitch = -intensity; break;  // hard up
-          case 4: this.evadeYaw = 0;          this.evadePitch = intensity; break;   // hard down
-          case 5: this.evadeYaw = 0;          this.evadePitch = intensity; break;   // hard down
-          case 6: this.evadeYaw = -intensity * 0.5; this.evadePitch = -intensity; break; // up-left
-          case 7: this.evadeYaw = intensity * 0.5;  this.evadePitch = -intensity; break; // up-right
-          case 8: this.evadeYaw = -intensity * 0.5; this.evadePitch = intensity; break;  // down-left
-          case 9: this.evadeYaw = intensity * 0.5;  this.evadePitch = intensity; break;  // down-right
-        }
-        // Second direction — perpendicular to first for curved arc
-        const dir2Seed = chaos(this.timer * 7, this.seed + 1);
-        const dir2 = Math.floor((dir2Seed + 1) * 4) % 8;
-        switch (dir2) {
-          case 0: this.evadeYaw2 = -intensity; this.evadePitch2 = 0; break;
-          case 1: this.evadeYaw2 = intensity;  this.evadePitch2 = 0; break;
-          case 2: this.evadeYaw2 = 0;          this.evadePitch2 = -intensity; break;
-          case 3: this.evadeYaw2 = 0;          this.evadePitch2 = intensity; break;
-          case 4: this.evadeYaw2 = -intensity * 0.5; this.evadePitch2 = -intensity; break;
-          case 5: this.evadeYaw2 = intensity * 0.5;  this.evadePitch2 = -intensity; break;
-          case 6: this.evadeYaw2 = -intensity * 0.5; this.evadePitch2 = intensity; break;
-          case 7: this.evadeYaw2 = intensity * 0.5;  this.evadePitch2 = intensity; break;
-        }
-        this.prevYaw = this.evadeYaw;
-        this.prevPitch = this.evadePitch;
+        this.phaseDuration = 2.5 + r * 1.5; // 2.5-4s
+        this.maneuverDir *= -1; // alternate sides each evade
+
+        // Pick a random maneuver
+        const maneuvers: Maneuver[] = [
+          'break_turn', 'break_turn',  // 2x weight — most common
+          'dive_pull', 'dive_pull',    // 2x weight — dramatic altitude change
+          'climb_roll',                // Immelmann
+          'split_s',                   // split-S
+          'scissors',                  // close-range scissors
+          'throttle_cut',              // speed trap
+        ];
+        const pick = Math.floor((chaos(this.timer * 5, this.seed) + 1) * 0.5 * maneuvers.length) % maneuvers.length;
+        this.maneuver = maneuvers[pick];
+
+        this.prevYaw = 0;
+        this.prevPitch = 0;
         break;
       }
     }

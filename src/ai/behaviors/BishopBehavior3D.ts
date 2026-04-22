@@ -1,5 +1,5 @@
 // ── Bishop Boss AI (Level 3) ─────────────────────────────
-// Committed breaks + HP escalation + drones + steering smoothing.
+// Top Gun maneuvers + HP-gated escalation + drones.
 
 import * as THREE from 'three';
 import { Ship3D } from '../../entities/Ship3D';
@@ -9,6 +9,7 @@ import { steerToward, steerAway, leadIntercept, chaos } from '../Steering';
 
 type Phase = 'chase' | 'engage' | 'overshoot' | 'evade';
 type BossPhase = 'phase1' | 'phase2' | 'phase3';
+type Maneuver = 'break_turn' | 'dive_pull' | 'climb_roll' | 'split_s' | 'scissors' | 'throttle_cut';
 
 export class BishopBehavior3D implements AIBehavior3D {
   private fireRate: number;
@@ -19,10 +20,8 @@ export class BishopBehavior3D implements AIBehavior3D {
   private timer = 0;
   private seed = 7.19;
   private bossPhase: BossPhase = 'phase1';
-  private evadeYaw = 0;
-  private evadePitch = 0;
-  private evadeYaw2 = 0;
-  private evadePitch2 = 0;
+  private maneuver: Maneuver = 'break_turn';
+  private maneuverDir = 1;
   private prevYaw = 0;
   private prevPitch = 0;
 
@@ -111,18 +110,56 @@ export class BishopBehavior3D implements AIBehavior3D {
         break;
       }
       case 'overshoot': {
-        const steer = steerAway(self, target.position, phaseSens, 0.5, 0);
-        yaw = steer.yaw; pitch = steer.pitch - 0.5;
-        pitch = Math.max(-1, Math.min(1, pitch));
-        thrust = 0.4;
+        yaw = 0; pitch = -0.7; thrust = 1.0;
+        smooth = false;
         break;
       }
       case 'evade': {
-        const ep = this.phaseTimer / Math.max(0.01, this.phaseDuration);
-        yaw = ep < 0.4 ? this.evadeYaw : this.evadeYaw2;
-        pitch = ep < 0.4 ? this.evadePitch : this.evadePitch2;
-        thrust = 1.0;
         smooth = false;
+        const t = this.phaseTimer;
+        const d = this.maneuverDir;
+        const I = 0.7 + this.cfg.aggression * 0.3;
+
+        switch (this.maneuver) {
+          case 'break_turn':
+            yaw = d * I; pitch = -0.3 * I; thrust = 1.0;
+            break;
+          case 'dive_pull':
+            if (t < this.phaseDuration * 0.45) {
+              yaw = 0; pitch = 0.9 * I; thrust = 1.0;
+            } else {
+              yaw = d * 0.3; pitch = -0.9 * I; thrust = 0.8;
+            }
+            break;
+          case 'climb_roll':
+            if (t < this.phaseDuration * 0.5) {
+              yaw = 0; pitch = -I; thrust = 1.0;
+            } else {
+              yaw = d * I; pitch = 0; thrust = 0.9;
+            }
+            break;
+          case 'split_s':
+            if (t < this.phaseDuration * 0.3) {
+              yaw = 0; pitch = 0.8 * I; thrust = 0.6;
+            } else {
+              yaw = d * 0.2; pitch = -0.7 * I; thrust = 1.0;
+            }
+            break;
+          case 'scissors': {
+            const sp = Math.floor(t / 0.5) % 2; // fastest scissors for Bishop
+            yaw = sp === 0 ? d * I : -d * I;
+            pitch = (sp === 0 ? -0.3 : 0.3) * I;
+            thrust = 0.7;
+            break;
+          }
+          case 'throttle_cut':
+            if (t < this.phaseDuration * 0.35) {
+              yaw = d * 0.3; pitch = 0; thrust = 0;
+            } else {
+              yaw = d * I; pitch = -0.4 * I; thrust = 1.0;
+            }
+            break;
+        }
         break;
       }
     }
@@ -133,7 +170,6 @@ export class BishopBehavior3D implements AIBehavior3D {
     }
     this.prevYaw = yaw;
     this.prevPitch = pitch;
-
     yaw = Math.max(-1, Math.min(1, yaw));
     pitch = Math.max(-1, Math.min(1, pitch));
     return { yaw, pitch, roll: -yaw * 0.6, thrust, fire };
@@ -142,44 +178,19 @@ export class BishopBehavior3D implements AIBehavior3D {
   private _setPhase(phase: Phase): void {
     this.phase = phase;
     this.phaseTimer = 0;
-    const a = this.cfg.aggression;
     const berserk = this.bossPhase === 'phase3' ? 0.6 : 1;
     const r = (chaos(this.timer, this.seed) + 1) * 0.5;
     switch (phase) {
       case 'chase':     this.phaseDuration = 5; break;
       case 'engage':    this.phaseDuration = (1.5 + r * 1.5) * berserk; break;
-      case 'overshoot': this.phaseDuration = (0.2 + r * 0.2) * berserk; break;
+      case 'overshoot': this.phaseDuration = (0.7 + r * 0.4) * berserk; break;
       case 'evade': {
-        this.phaseDuration = (2.0 + r * 1.5) * berserk;
-        const dirSeed = chaos(this.timer * 3, this.seed);
-        const dir = Math.floor((dirSeed + 1) * 5) % 10;
-        const intensity = 0.7 + a * 0.3;
-        switch (dir) {
-          case 0: this.evadeYaw = -intensity; this.evadePitch = 0; break;
-          case 1: this.evadeYaw = intensity;  this.evadePitch = 0; break;
-          case 2: this.evadeYaw = 0;          this.evadePitch = -intensity; break;
-          case 3: this.evadeYaw = 0;          this.evadePitch = -intensity; break;
-          case 4: this.evadeYaw = 0;          this.evadePitch = intensity; break;
-          case 5: this.evadeYaw = 0;          this.evadePitch = intensity; break;
-          case 6: this.evadeYaw = -intensity * 0.5; this.evadePitch = -intensity; break;
-          case 7: this.evadeYaw = intensity * 0.5;  this.evadePitch = -intensity; break;
-          case 8: this.evadeYaw = -intensity * 0.5; this.evadePitch = intensity; break;
-          case 9: this.evadeYaw = intensity * 0.5;  this.evadePitch = intensity; break;
-        }
-        const d2s = chaos(this.timer * 7, this.seed + 1);
-        const d2 = Math.floor((d2s + 1) * 4) % 8;
-        switch (d2) {
-          case 0: this.evadeYaw2 = -intensity; this.evadePitch2 = 0; break;
-          case 1: this.evadeYaw2 = intensity;  this.evadePitch2 = 0; break;
-          case 2: this.evadeYaw2 = 0;          this.evadePitch2 = -intensity; break;
-          case 3: this.evadeYaw2 = 0;          this.evadePitch2 = intensity; break;
-          case 4: this.evadeYaw2 = -intensity * 0.5; this.evadePitch2 = -intensity; break;
-          case 5: this.evadeYaw2 = intensity * 0.5;  this.evadePitch2 = -intensity; break;
-          case 6: this.evadeYaw2 = -intensity * 0.5; this.evadePitch2 = intensity; break;
-          case 7: this.evadeYaw2 = intensity * 0.5;  this.evadePitch2 = intensity; break;
-        }
-        this.prevYaw = this.evadeYaw;
-        this.prevPitch = this.evadePitch;
+        this.phaseDuration = (2.5 + r * 1.5) * berserk;
+        this.maneuverDir *= -1;
+        const maneuvers: Maneuver[] = ['break_turn','break_turn','dive_pull','dive_pull','climb_roll','split_s','scissors','throttle_cut'];
+        const pick = Math.floor((chaos(this.timer * 5, this.seed) + 1) * 0.5 * maneuvers.length) % maneuvers.length;
+        this.maneuver = maneuvers[pick];
+        this.prevYaw = 0; this.prevPitch = 0;
         break;
       }
     }
