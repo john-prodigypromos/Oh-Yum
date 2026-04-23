@@ -616,7 +616,7 @@ export function createEnemyShipGeometry(): THREE.Group {
   // COCKPIT CANOPY — dome glass + frame rails
   // ═══════════════════════════════════════════════════════════
   const canopyGeo = new THREE.SphereGeometry(0.5, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.42);
-  canopyGeo.scale(0.78, 1.0, 2.0); // 35% narrower
+  canopyGeo.scale(1.56, 1.25, 2.5);
   const canopy = new THREE.Mesh(canopyGeo);
   canopy.name = 'cockpit';
   canopy.position.set(0, 0.22, 1.2);
@@ -677,20 +677,18 @@ export function createEnemyShipGeometry(): THREE.Group {
   rightWing.position.set(0.4, -0.06, -0.1);
   group.add(rightWing);
 
-  // ═══════════════════════════════════════════════════════════
-  // WING TRAILING-EDGE LASER LIGHTS — red, right on the back edge
-  // ═══════════════════════════════════════════════════════════
-  // Trailing edge is at Z = -0.1 (constant) for all span positions
+  // WING ACCENT LIGHTS — along swept accent line (root-forward → tip-aft)
   for (const side of [-1, 1]) {
-    for (const spanPos of [0.6, 1.1, 1.6, 2.2]) {
+    for (const t of [0.15, 0.4, 0.65, 0.9]) {
+      const x = (0.8 + t * 2.3) * side;
+      const z = 0.6 + t * -1.2;
       const emitterGeo = new THREE.SphereGeometry(0.035, 8, 6);
       const emitter = new THREE.Mesh(emitterGeo);
       emitter.name = 'accent';
-      emitter.position.set(side * spanPos, 0.02, -0.1);
+      emitter.position.set(x, 0.02, z);
       group.add(emitter);
-
       const edgeLight = new THREE.PointLight(0xff2200, 0.6, 3, 2);
-      edgeLight.position.set(side * spanPos, 0.04, -0.1);
+      edgeLight.position.set(x, 0.04, z);
       group.add(edgeLight);
     }
   }
@@ -779,74 +777,83 @@ export function createEnemyShipGeometry(): THREE.Group {
   for (const side of [-1, 1]) {
     const sx = side * 0.82;
     const sy = -0.05;
+    const engGroup = new THREE.Group();
+    engGroup.position.set(sx, sy, 0);
+    engGroup.scale.z = 0.75; // 25% shorter in length
 
-    // Engine housing (75% of previous)
-    const ehGeo = new THREE.CylinderGeometry(0.47, 0.53, 2.2, 22);
+    // Engine housing
+    const ehGeo = new THREE.CylinderGeometry(0.705, 0.795, 2.86, 22);
     ehGeo.rotateX(Math.PI / 2);
     const housing = new THREE.Mesh(ehGeo);
     housing.name = 'hull';
-    housing.position.set(sx, sy, -2.9);
-    group.add(housing);
+    housing.position.set(0, 0, -2.9);
+    engGroup.add(housing);
 
-    // Engine intake lip (front ring)
-    const eiGeo = new THREE.TorusGeometry(0.48, 0.042, 10, 22);
+    const eiGeo = new THREE.TorusGeometry(0.72, 0.063, 10, 22);
     const intakeLip = new THREE.Mesh(eiGeo);
     intakeLip.name = 'hull';
-    intakeLip.position.set(sx, sy, -1.8);
-    group.add(intakeLip);
+    intakeLip.position.set(0, 0, -1.47);
+    engGroup.add(intakeLip);
 
-    // Engine fan face (dark)
-    const fanGeo = new THREE.CircleGeometry(0.44, 18);
+    const fanGeo = new THREE.CircleGeometry(0.66, 18);
     const fan = new THREE.Mesh(fanGeo);
     fan.name = 'armor-dark';
-    fan.position.set(sx, sy, -1.79);
-    group.add(fan);
+    fan.position.set(0, 0, -1.46);
+    engGroup.add(fan);
 
-    // Engine core (glowing)
-    const ecGeo = new THREE.CylinderGeometry(0.27, 0.38, 1.0, 16);
+    const ecGeo = new THREE.CylinderGeometry(0.405, 0.57, 1.3, 16);
     ecGeo.rotateX(Math.PI / 2);
     const core = new THREE.Mesh(ecGeo);
     core.name = 'engine';
-    core.position.set(sx, sy, -3.6);
-    group.add(core);
+    core.position.set(0, 0, -3.8);
+    engGroup.add(core);
 
-    // Exhaust cone
-    const exGeo = new THREE.ConeGeometry(0.21, 0.5, 14);
+    const exGeo = new THREE.ConeGeometry(0.315, 0.65, 14);
     exGeo.rotateX(Math.PI / 2);
     const exhaust = new THREE.Mesh(exGeo);
     exhaust.name = 'engine';
-    exhaust.position.set(sx, sy, -4.1);
-    group.add(exhaust);
+    exhaust.position.set(0, 0, -4.4);
+    engGroup.add(exhaust);
 
-    // Nozzle outer ring
-    const noGeo = new THREE.TorusGeometry(0.42, 0.047, 12, 24);
+    const noGeo = new THREE.TorusGeometry(0.63, 0.07, 12, 24);
     const nOuter = new THREE.Mesh(noGeo);
     nOuter.name = 'hull';
-    nOuter.position.set(sx, sy, -4.0);
-    group.add(nOuter);
+    nOuter.position.set(0, 0, -4.33);
+    engGroup.add(nOuter);
 
-    // Nozzle glow ring
-    const ngGeo = new THREE.RingGeometry(0.10, 0.36, 20);
+    const ngGeo = new THREE.RingGeometry(0.15, 0.54, 20);
     const nGlow = new THREE.Mesh(ngGeo);
     nGlow.name = 'nozzle';
-    nGlow.position.set(sx, sy, -4.05);
-    group.add(nGlow);
+    nGlow.position.set(0, 0, -4.38);
+    engGroup.add(nGlow);
 
-    // Nozzle petals — 6 small wedges around the nozzle
     for (let p = 0; p < 6; p++) {
       const angle = (p / 6) * Math.PI * 2;
-      const petalGeo = new THREE.BoxGeometry(0.042, 0.13, 0.21);
+      const petalGeo = new THREE.BoxGeometry(0.063, 0.195, 0.273);
       const petal = new THREE.Mesh(petalGeo);
       petal.name = 'hull';
       petal.position.set(
-        sx + Math.cos(angle) * 0.40,
-        sy + Math.sin(angle) * 0.40,
-        -4.05,
+        Math.cos(angle) * 0.60,
+        Math.sin(angle) * 0.60,
+        -4.38,
       );
       petal.rotation.z = angle;
-      group.add(petal);
+      engGroup.add(petal);
     }
 
+    // Accent rings — inside engGroup so they scale with the engine
+    const a1Geo = new THREE.TorusGeometry(0.75, 0.015, 8, 20);
+    const acc1 = new THREE.Mesh(a1Geo);
+    acc1.name = 'accent';
+    acc1.position.set(0, 0, -1.8);
+    engGroup.add(acc1);
+    const a2Geo = new THREE.TorusGeometry(0.75, 0.015, 8, 20);
+    const acc2 = new THREE.Mesh(a2Geo);
+    acc2.name = 'accent';
+    acc2.position.set(0, 0, -3.8);
+    engGroup.add(acc2);
+
+    group.add(engGroup);
   }
 
 
@@ -855,7 +862,7 @@ export function createEnemyShipGeometry(): THREE.Group {
   // UNDER-WING LASER CANNONS — sleek glowing red pods
   // ═══════════════════════════════════════════════════════════
   for (const side of [-1, 1]) {
-    const wx = side * 1.15;
+    const wx = side * 1.55;
     const wy = -0.26;
 
     // Pylon — thin connector from wing to pod
@@ -866,7 +873,7 @@ export function createEnemyShipGeometry(): THREE.Group {
     group.add(pylon);
 
     // Barrel housing — sleek octagonal tube (115% diameter)
-    const barrelGeo = new THREE.CylinderGeometry(0.058, 0.069, 1.2, 8);
+    const barrelGeo = new THREE.CylinderGeometry(0.162, 0.193, 1.2, 8);
     barrelGeo.rotateX(Math.PI / 2);
     const barrel = new THREE.Mesh(barrelGeo);
     barrel.name = 'hull';
@@ -875,15 +882,18 @@ export function createEnemyShipGeometry(): THREE.Group {
 
     // Energy rings — two glowing red rings around the barrel
     for (const rz of [-0.25, 0.15]) {
-      const ringGeo = new THREE.TorusGeometry(0.08, 0.014, 8, 12);
+      const ringGeo = new THREE.TorusGeometry(0.22, 0.015, 10, 24);
       const ring = new THREE.Mesh(ringGeo);
       ring.name = 'accent';
       ring.position.set(wx, wy, rz);
       group.add(ring);
+      const ringLight = new THREE.PointLight(0xff2200, 0.8, 4, 2);
+      ringLight.position.set(wx, wy, rz);
+      group.add(ringLight);
     }
 
     // Muzzle tip — glowing red barrel end (115% diameter)
-    const muzzleGeo = new THREE.CylinderGeometry(0.029, 0.046, 0.2, 8);
+    const muzzleGeo = new THREE.CylinderGeometry(0.081, 0.129, 0.2, 8);
     muzzleGeo.rotateX(Math.PI / 2);
     const muzzle = new THREE.Mesh(muzzleGeo);
     muzzle.name = 'accent';
@@ -899,62 +909,71 @@ export function createEnemyShipGeometry(): THREE.Group {
   // ═══════════════════════════════════════════════════════════
   // ACCENT LINES — red seams flush on body surface
   // ═══════════════════════════════════════════════════════════
-  // Dorsal fuselage lines — pulled back to stay within hull envelope
+  // Wing accent strip — sweeps aft from root to tip, extends to wingtips
   for (const side of [-1, 1]) {
-    const aGeo = new THREE.BoxGeometry(0.03, 0.01, 3.0);
-    const accent = new THREE.Mesh(aGeo);
-    accent.name = 'accent';
-    accent.position.set(side * 0.28, 0.40, -0.5);
-    group.add(accent);
-  }
-  // Wing TRAILING edge accent strip — straight at Z = -0.1
-  for (const side of [-1, 1]) {
-    const teGeo = new THREE.BoxGeometry(2.6, 0.03, 0.04);
+    const innerX = side * 0.8, innerZ = 0.6;
+    const outerX = side * 3.1, outerZ = -0.6;
+    const mx = (innerX + outerX) / 2;
+    const mz = (innerZ + outerZ) / 2;
+    const dx = outerX - innerX;
+    const dz = outerZ - innerZ;
+    const len = Math.sqrt(dx * dx + dz * dz);
+    const angle = -Math.atan2(dz, dx);
+    const teGeo = new THREE.BoxGeometry(len, 0.03, 0.04);
     const teStrip = new THREE.Mesh(teGeo);
     teStrip.name = 'accent';
-    teStrip.position.set(side * 1.7, 0.01, -0.1);
+    teStrip.position.set(mx, 0.01, mz);
+    teStrip.rotation.y = angle;
     group.add(teStrip);
-
-    // Point lights along trailing edge
-    for (const xOff of [0.8, 1.6, 2.4]) {
+    for (const t of [0.2, 0.5, 0.8]) {
       const edgeLight = new THREE.PointLight(0xff2200, 0.8, 5, 2);
-      edgeLight.position.set(side * xOff, -0.02, -0.1);
+      edgeLight.position.set(innerX + dx * t, -0.02, innerZ + dz * t);
       group.add(edgeLight);
     }
   }
-  // Wing LEADING edge accent strip — follows scimitar sweep curve
-  // Leading edge Z = 2.8*(1-t*0.55) - t²*1.2 - 0.1, using segments
-  for (const side of [-1, 1]) {
-    const segs = [0.0, 0.25, 0.5, 0.75, 1.0];
-    for (let s = 0; s < segs.length - 1; s++) {
-      const t0 = segs[s], t1 = segs[s + 1];
-      const x0 = (t0 * 3.9) + 0.4, x1 = (t1 * 3.9) + 0.4;
-      const z0 = 2.8 * (1 - t0 * 0.55) - t0 * t0 * 1.2 - 0.1;
-      const z1 = 2.8 * (1 - t1 * 0.55) - t1 * t1 * 1.2 - 0.1;
-      const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2;
-      const len = Math.sqrt((x1 - x0) ** 2 + (z1 - z0) ** 2);
-      const angle = Math.atan2(z1 - z0, x1 - x0);
-      const segGeo = new THREE.BoxGeometry(len, 0.03, 0.04);
-      const seg = new THREE.Mesh(segGeo);
-      seg.name = 'accent';
-      seg.position.set(side * mx, 0.01, mz);
-      seg.rotation.y = -side * angle;
-      group.add(seg);
-    }
-  }
-  // Engine accent rings — sit on engine housing
-  for (const side of [-1, 1]) {
-    const aGeo = new THREE.TorusGeometry(0.53, 0.015, 8, 20);
-    const accent = new THREE.Mesh(aGeo);
-    accent.name = 'accent';
-    accent.position.set(side * 0.82, -0.05, -2.0);
-    group.add(accent);
-    const a2 = new THREE.Mesh(aGeo.clone());
-    a2.name = 'accent';
-    a2.position.set(side * 0.82, -0.05, -3.5);
-    group.add(a2);
+  // Engine accent rings now inside engGroup above
   }
 
+  // Ventral accent lines — downward-facing plane, depthTest:false
+  const ventralMat = new THREE.MeshBasicMaterial({
+    color: 0xff2200,
+    side: THREE.FrontSide,
+    depthTest: false,
+  });
+  for (const side of [-1, 1]) {
+    const vGeo = new THREE.PlaneGeometry(0.04, 1.5);
+    vGeo.rotateX(Math.PI / 2);
+    const vLine = new THREE.Mesh(vGeo, ventralMat);
+    vLine.name = 'ventral-glow';
+    vLine.renderOrder = 999;
+    vLine.position.set(side * 0.20, -0.55, -0.2);
+    group.add(vLine);
+  }
+
+  // VOX text on right wing
+  const logoCanvas = document.createElement('canvas');
+  logoCanvas.width = 512; logoCanvas.height = 256;
+  const logoCtx = logoCanvas.getContext('2d')!;
+  logoCtx.clearRect(0, 0, 512, 256);
+  logoCtx.font = 'bold 180px Arial Black, Impact, sans-serif';
+  logoCtx.textAlign = 'center';
+  logoCtx.textBaseline = 'middle';
+  logoCtx.fillStyle = '#111111';
+  logoCtx.fillText('VOX', 256, 128);
+  const logoTex = new THREE.CanvasTexture(logoCanvas);
+  logoTex.colorSpace = THREE.SRGBColorSpace;
+  const lMat = new THREE.MeshBasicMaterial({
+    map: logoTex, transparent: true, alphaTest: 0.1,
+    side: THREE.FrontSide, depthTest: false,
+  });
+  const logoGeo = new THREE.PlaneGeometry(1.4, 0.63);
+  logoGeo.rotateX(-Math.PI / 2);
+  const logo = new THREE.Mesh(logoGeo, lMat);
+  logo.name = 'ventral-glow';
+  logo.renderOrder = 998;
+  logo.rotation.y = 0.48;
+  logo.position.set(1.8, 0.08, 0.4);
+  group.add(logo);
 
   // ═══════════════════════════════════════════════════════════
   // NAVIGATION LIGHTS — red port, green starboard

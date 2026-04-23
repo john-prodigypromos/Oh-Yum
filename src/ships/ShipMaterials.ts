@@ -153,36 +153,46 @@ function createBrushedMetalMap(size: number, seed: number): THREE.CanvasTexture 
 /** Enemy ship materials — solid metallic black, mirror-shine, red accent lighting.
  *  Piano-black stealth fighter look — no texture, pure gloss. */
 export function createEnemyMaterials(): ShipMaterialSet {
-  // Main hull — solid black, high metalness, very smooth, strong clearcoat
+  // Main hull — Cool Grey 2C with riveted texture
+  const { normalMap, roughnessMap } = getSharedTextures();
   const hull = new THREE.MeshPhysicalMaterial({
-    color: 0x080808,
-    metalness: 1.0,
-    roughness: 0.05,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.02,
-    reflectivity: 1.0,
+    color: 0xcbcac8,
+    metalness: 0.6,
+    roughness: 0.15,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.05,
+    reflectivity: 0.8,
+    emissive: 0x333336,
+    emissiveIntensity: 0.15,
+    normalMap: normalMap,
+    roughnessMap: roughnessMap,
     side: THREE.DoubleSide,
   });
 
   // Armor panels — same solid black, slightly different sheen
   const armorDark = new THREE.MeshPhysicalMaterial({
-    color: 0x050505,
-    metalness: 1.0,
-    roughness: 0.08,
-    clearcoat: 1.0,
-    clearcoatRoughness: 0.03,
+    color: 0xa8a7a5,
+    metalness: 0.6,
+    roughness: 0.2,
+    clearcoat: 0.8,
+    clearcoatRoughness: 0.05,
+    emissive: 0x2a2a2d,
+    emissiveIntensity: 0.12,
+    normalMap: normalMap,
+    roughnessMap: roughnessMap,
   });
 
   // Cockpit — darker silver chrome visor
   const cockpit = new THREE.MeshPhysicalMaterial({
-    color: 0x8c8c99,
-    emissive: 0x40484d,
-    emissiveIntensity: 0.3,
+    color: 0x2a2e35,
+    emissive: 0x1a1e25,
+    emissiveIntensity: 0.2,
     metalness: 1.0,
-    roughness: 0.02,
+    roughness: 0.0,
     clearcoat: 1.0,
     clearcoatRoughness: 0.0,
     reflectivity: 1.0,
+    envMapIntensity: 2.0,
   });
 
   // Red accent strip material — subtle edge lighting
@@ -223,6 +233,7 @@ export function applyMaterials(group: THREE.Group, mats: ShipMaterialSet): void 
     if (!(child instanceof THREE.Mesh)) return;
 
     const name = child.name;
+    if (name === 'ventral-glow') return; // has its own depthTest:false material
     if (name === 'cockpit') {
       child.material = mats.cockpit;
     } else if (name.startsWith('nozzle')) {
