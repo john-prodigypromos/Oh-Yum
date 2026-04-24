@@ -59,6 +59,11 @@ export class HUD3D {
   private missionPhase: 'launch' | 'combat' | 'landing' | null = null;
   // Pre-allocated to avoid per-frame Vector3 garbage in the project calls
   private _projTmp = new THREE.Vector3();
+  // Artificial horizon
+  private horizonContainer: HTMLDivElement = null!;
+  private horizonLine: HTMLDivElement = null!;
+  private horizonLabel: HTMLDivElement = null!;
+  private _euler = new THREE.Euler();
 
   constructor() {
     const overlay = document.getElementById('ui-overlay')!;
@@ -198,6 +203,43 @@ export class HUD3D {
       @keyframes lockSpin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
       @keyframes lockPulse { 0%,100%{opacity:0.6} 50%{opacity:1} }
 
+      /* ── Artificial horizon ── */
+      .horizon-container {
+        position:fixed;bottom:26vh;left:50%;transform:translateX(-50%);
+        width:120px;height:120px;
+        pointer-events:none;z-index:22;
+        overflow:hidden;border-radius:50%;
+        border:1px solid rgba(60,120,200,0.2);
+        background:rgba(0,0,0,0.15);
+      }
+      .horizon-line {
+        position:absolute;left:50%;top:50%;
+        width:100%;height:0;
+        transform-origin:center center;
+        border-top:2px solid rgba(0,200,255,0.5);
+      }
+      .horizon-line::before {
+        content:'';position:absolute;
+        left:calc(50% - 4px);top:-5px;
+        width:8px;height:8px;
+        border:2px solid rgba(0,200,255,0.5);border-radius:50%;
+        background:transparent;
+      }
+      .horizon-line::after {
+        content:'';position:absolute;
+        left:0;right:0;bottom:0;
+        height:60px;
+        background:linear-gradient(to bottom, rgba(100,60,0,0.15), rgba(100,60,0,0.25));
+        pointer-events:none;
+      }
+      .horizon-label {
+        position:absolute;bottom:4px;left:50%;transform:translateX(-50%);
+        font-size:9px;font-weight:700;letter-spacing:2px;
+        color:rgba(255,100,50,0.9);font-family:var(--font-display);
+        text-shadow:0 0 6px rgba(255,80,30,0.5);
+        opacity:0;transition:opacity 0.3s ease;
+      }
+
       /* ── Speed lines overlay ── */
       .speed-lines {
         position:fixed;top:0;left:0;width:100%;height:100%;
@@ -262,7 +304,7 @@ export class HUD3D {
     this.container.appendChild(topLeft);
 
     // Top-center: title
-    this.container.appendChild(el('div', { class: 'hud-top-center' }, 'OH-YUM BLASTER'));
+    this.container.appendChild(el('div', { class: 'hud-top-center' }, 'PRODIGY BLASTER'));
 
     // Bottom-left: score + targets + level
     const bottomLeft = el('div', { class: 'hud-bottom-left' });
@@ -310,6 +352,18 @@ export class HUD3D {
       }, 'E = Thruster  /  D = Reverse  /  F = Toggle Enemy');
       this.container.appendChild(controls);
     }
+
+    // ── Artificial horizon — roll/pitch indicator ──
+    this.horizonContainer = document.createElement('div');
+    this.horizonContainer.className = 'horizon-container';
+    this.horizonLine = document.createElement('div');
+    this.horizonLine.className = 'horizon-line';
+    this.horizonContainer.appendChild(this.horizonLine);
+    this.horizonLabel = document.createElement('div');
+    this.horizonLabel.className = 'horizon-label';
+    this.horizonLabel.textContent = 'INVERTED';
+    this.horizonContainer.appendChild(this.horizonLabel);
+    this.container.appendChild(this.horizonContainer);
 
     // ── Cockpit frame — cinematic dark gradient with subtle struts ──
     const frame = document.createElement('div');
@@ -438,6 +492,20 @@ export class HUD3D {
       this.speedLinesEl.style.opacity = String(intensity);
     } else {
       this.speedLinesEl.style.opacity = '0';
+    }
+
+    // ── Artificial horizon — update roll and pitch from player ship orientation ──
+    if (camera) {
+      this._euler.setFromQuaternion(player.group.quaternion, 'ZXY');
+      const roll = this._euler.z;   // radians, 0 = level
+      const pitch = this._euler.x;  // radians, negative = nose up
+      // Pitch shifts the line vertically: nose up moves line down, nose down moves line up
+      const pitchOffset = Math.max(-40, Math.min(40, pitch * 40));
+      this.horizonLine.style.transform = `translate(-50%, ${pitchOffset}px) rotate(${-roll}rad)`;
+      // Show INVERTED label when rolled past ~120 degrees
+      const absRoll = Math.abs(roll);
+      const inverted = absRoll > Math.PI * 0.65;
+      this.horizonLabel.style.opacity = inverted ? '1' : '0';
     }
 
     if (player.damagePct > 0.75) {
@@ -574,8 +642,8 @@ export class HUD3D {
 
         if (slot.portrait) {
           slot.portrait.style.display = 'block';
-          slot.portrait.style.width = '60px';
-          slot.portrait.style.height = '60px';
+          slot.portrait.style.width = '75px';
+          slot.portrait.style.height = '75px';
           slot.portrait.style.border = '2px solid #ff4444';
           slot.portrait.style.filter = 'drop-shadow(0 0 3px rgba(255,0,0,0.4))';
         }
@@ -585,7 +653,7 @@ export class HUD3D {
 
         const dist = Math.round(enemy.position.distanceTo(player.position));
         slot.label.style.display = 'block';
-        slot.label.style.fontSize = '13px';
+        slot.label.style.fontSize = '16px';
         slot.label.style.fontWeight = 'normal';
         slot.label.style.color = '#ff4444';
         slot.label.style.textShadow = 'none';
@@ -609,11 +677,11 @@ export class HUD3D {
       slot.arrow.style.display = 'none';
 
       if (showDetails) {
-        const portraitSize = Math.round(85 * distScale);
-        const barWidth = Math.round(85 * distScale);
-        const barH = Math.max(4, Math.round(8 * distScale));
-        const fontSize = Math.max(9, Math.round(14 * distScale));
-        const dropShadowPx = Math.round(8 * distScale);
+        const portraitSize = Math.round(106 * distScale);
+        const barWidth = Math.round(106 * distScale);
+        const barH = Math.max(5, Math.round(10 * distScale));
+        const fontSize = Math.max(11, Math.round(18 * distScale));
+        const dropShadowPx = Math.round(10 * distScale);
 
         if (slot.portrait) {
           slot.portrait.style.display = 'block';
@@ -680,8 +748,8 @@ export class HUD3D {
     if (inLockZone && onScreen) {
       const dist = enemy.position.distanceTo(player.position);
       const distScale = Math.max(0.3, Math.min(1.0, 60 / Math.max(dist, 1)));
-      const portraitSize = Math.round(85 * distScale);
-      const boxSize = portraitSize + Math.round(24 * distScale);
+      const portraitSize = Math.round(106 * distScale);
+      const boxSize = portraitSize + Math.round(30 * distScale);
 
       // Position and size
       this.lockOverlay.style.left = sx + 'px';
@@ -690,10 +758,10 @@ export class HUD3D {
       this.lockRing.style.height = boxSize + 'px';
       this.lockPortrait.style.width = portraitSize + 'px';
       this.lockPortrait.style.height = portraitSize + 'px';
-      this.lockText.style.fontSize = Math.max(9, Math.round(14 * distScale)) + 'px';
-      this.lockBarBg.style.width = Math.round(85 * distScale) + 'px';
-      this.lockBarBg.style.height = Math.max(3, Math.round(6 * distScale)) + 'px';
-      this.lockInfo.style.fontSize = Math.max(9, Math.round(14 * distScale)) + 'px';
+      this.lockText.style.fontSize = Math.max(11, Math.round(18 * distScale)) + 'px';
+      this.lockBarBg.style.width = Math.round(106 * distScale) + 'px';
+      this.lockBarBg.style.height = Math.max(4, Math.round(8 * distScale)) + 'px';
+      this.lockInfo.style.fontSize = Math.max(11, Math.round(18 * distScale)) + 'px';
 
       // Update portrait src if enemy changed
       const portraitFile = ENEMY_PORTRAITS[lockedTargetIndex];
