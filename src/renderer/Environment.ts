@@ -291,7 +291,7 @@ const PLANET_PROFILES: PlanetProfile[] = [
 
 /** Procedural planet surface texture on canvas. */
 function createPlanetTexture(type: PlanetProfile['textureType'], seed: number): THREE.CanvasTexture {
-  const W = 1024, H = 512;
+  const W = 2048, H = 1024;
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d')!;
@@ -516,12 +516,63 @@ function createPlanetTexture(type: PlanetProfile['textureType'], seed: number): 
   return tex;
 }
 
+/** Generate a procedural bump map for planet surface relief. */
+function createPlanetBumpMap(seed: number): THREE.CanvasTexture {
+  const W = 2048, H = 1024;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d')!;
+  const rng = seededRng(seed + 999);
+
+  // Base mid-grey
+  ctx.fillStyle = 'rgb(128, 128, 128)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Large terrain features
+  for (let i = 0; i < 60; i++) {
+    const cx = rng() * W, cy = rng() * H, cr = 30 + rng() * 150;
+    const bright = 100 + Math.floor(rng() * 60);
+    const g = ctx.createRadialGradient(cx, cy, cr * 0.1, cx, cy, cr);
+    g.addColorStop(0, `rgba(${bright}, ${bright}, ${bright}, ${0.2 + rng() * 0.3})`);
+    g.addColorStop(1, `rgba(${bright}, ${bright}, ${bright}, 0)`);
+    ctx.fillStyle = g;
+    ctx.fillRect(cx - cr, cy - cr, cr * 2, cr * 2);
+  }
+
+  // Fine noise detail
+  for (let i = 0; i < 3000; i++) {
+    const x = rng() * W, y = rng() * H;
+    const s = 1 + rng() * 4;
+    const bright = 90 + Math.floor(rng() * 80);
+    ctx.fillStyle = `rgba(${bright}, ${bright}, ${bright}, ${0.1 + rng() * 0.15})`;
+    ctx.fillRect(x, y, s, s);
+  }
+
+  // Crater rims — bright ring with dark center
+  for (let i = 0; i < 20; i++) {
+    const cx = rng() * W, cy = rng() * H, cr = 5 + rng() * 30;
+    ctx.strokeStyle = `rgba(180, 180, 180, ${0.15 + rng() * 0.2})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, cr, 0, Math.PI * 2); ctx.stroke();
+    const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, cr * 0.8);
+    cg.addColorStop(0, `rgba(80, 80, 80, ${0.1 + rng() * 0.1})`);
+    cg.addColorStop(1, 'rgba(128, 128, 128, 0)');
+    ctx.fillStyle = cg;
+    ctx.fillRect(cx - cr, cy - cr, cr * 2, cr * 2);
+  }
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.needsUpdate = true;
+  return tex;
+}
+
 /** Create a planet from a profile index (0-4). Exported for viewer use. */
 export function createPlanet(scene: THREE.Scene, profileIndex = 0): THREE.Group {
   const prof = PLANET_PROFILES[profileIndex % PLANET_PROFILES.length];
   const group = new THREE.Group();
 
-  const planetGeo = new THREE.SphereGeometry(prof.radius, 128, 96);
+  const planetGeo = new THREE.SphereGeometry(prof.radius, 192, 128);
   const planetMat = new THREE.MeshStandardMaterial({
     color: prof.color,
     metalness: prof.metalness,
@@ -530,8 +581,12 @@ export function createPlanet(scene: THREE.Scene, profileIndex = 0): THREE.Group 
     emissiveIntensity: 0.3,
   });
 
+  // Procedural bump map for surface relief
+  const bumpTex = createPlanetBumpMap(prof.textureSeed);
+  planetMat.bumpMap = bumpTex;
+  planetMat.bumpScale = 0.8;
+
   if (prof.textureType === 'venus') {
-    // Venus loads a real texture file
     const loader = new THREE.TextureLoader();
     loader.load('/textures/venus_surface.jpg', (tex) => {
       tex.colorSpace = THREE.SRGBColorSpace;
@@ -542,7 +597,6 @@ export function createPlanet(scene: THREE.Scene, profileIndex = 0): THREE.Group 
       planetMat.needsUpdate = true;
     });
   } else {
-    // Procedural canvas texture
     const tex = createPlanetTexture(prof.textureType, prof.textureSeed);
     planetMat.map = tex;
     planetMat.emissive.set(0x000000);
@@ -552,8 +606,8 @@ export function createPlanet(scene: THREE.Scene, profileIndex = 0): THREE.Group 
   const planet = new THREE.Mesh(planetGeo, planetMat);
   group.add(planet);
 
-  // Atmosphere
-  const atmos1Geo = new THREE.SphereGeometry(prof.radius * 1.027, 64, 48);
+  // Inner atmosphere — subtle haze
+  const atmos1Geo = new THREE.SphereGeometry(prof.radius * 1.02, 64, 48);
   const atmos1Mat = new THREE.MeshBasicMaterial({
     color: prof.atmosColor,
     transparent: true,
@@ -561,6 +615,16 @@ export function createPlanet(scene: THREE.Scene, profileIndex = 0): THREE.Group 
     side: THREE.BackSide,
   });
   group.add(new THREE.Mesh(atmos1Geo, atmos1Mat));
+
+  // Outer atmosphere glow — larger, softer
+  const atmos2Geo = new THREE.SphereGeometry(prof.radius * 1.06, 48, 32);
+  const atmos2Mat = new THREE.MeshBasicMaterial({
+    color: prof.atmosColor,
+    transparent: true,
+    opacity: prof.atmosOpacity * 0.5,
+    side: THREE.BackSide,
+  });
+  group.add(new THREE.Mesh(atmos2Geo, atmos2Mat));
 
   // Position
   group.position.set(...prof.position);

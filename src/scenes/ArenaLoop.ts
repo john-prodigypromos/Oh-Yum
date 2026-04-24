@@ -482,7 +482,7 @@ export function updateArena(
           state.score += 500;
           evt.target.group.visible = false;
 
-          // ── Enemy kill portrait flash — large fading avatar ──
+          // ── Enemy kill portrait flash + sustained explosion ──
           const killIdx = enemies.indexOf(evt.target);
           const killPortraitFiles = ['bolo-tie.jpg', 'bow-tie.jpg', 'bishop.jpg'];
           const killFile = killPortraitFiles[killIdx];
@@ -490,8 +490,8 @@ export function updateArena(
             const killOverlay = document.createElement('div');
             killOverlay.style.cssText = `
               position:fixed;top:40px;left:50%;transform:translateX(-50%);
-              width:min(700px,85vw);pointer-events:none;z-index:35;
-              text-align:center;opacity:0.6;transition:opacity 2.4s ease-out;
+              width:min(450px,70vw);pointer-events:none;z-index:35;
+              text-align:center;opacity:0.6;transition:opacity 3.5s ease-out;
             `;
             const killImg = document.createElement('img');
             killImg.src = `/portraits/${killFile}?v=2`;
@@ -499,7 +499,20 @@ export function updateArena(
             killOverlay.appendChild(killImg);
             document.getElementById('ui-overlay')?.appendChild(killOverlay);
             requestAnimationFrame(() => { killOverlay.style.opacity = '0'; });
-            setTimeout(() => killOverlay.remove(), 2800);
+            setTimeout(() => killOverlay.remove(), 4000);
+
+            // Staggered explosions at the death position while portrait fades
+            const dp = deathPos;
+            const spawnDelayed = (delay: number) => {
+              setTimeout(() => {
+                explosions.spawnDeathWorld(dp, state.camera);
+                state.sound.explosion();
+              }, delay);
+            };
+            spawnDelayed(300);
+            spawnDelayed(700);
+            spawnDelayed(1200);
+            spawnDelayed(1800);
           }
         }
         state.sound.explosion();
