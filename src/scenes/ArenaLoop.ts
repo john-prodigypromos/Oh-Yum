@@ -493,10 +493,23 @@ export function updateArena(
               width:min(450px,70vw);pointer-events:none;z-index:35;
               text-align:center;opacity:0.6;transition:opacity 3.5s ease-out;
             `;
+            // Portrait image
             const killImg = document.createElement('img');
             killImg.src = `/portraits/${killFile}?v=2`;
             killImg.style.cssText = 'width:100%;height:auto;object-fit:cover;border-radius:50%;aspect-ratio:1;filter:grayscale(0.3) drop-shadow(0 0 40px rgba(255,0,0,0.4));border:3px solid rgba(255,50,0,0.3);';
             killOverlay.appendChild(killImg);
+
+            // ELIMINATED text over portrait
+            const killText = document.createElement('div');
+            killText.textContent = 'ELIMINATED';
+            killText.style.cssText = `
+              position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+              font-family:var(--font-display);font-size:clamp(28px,6vw,48px);font-weight:900;
+              letter-spacing:8px;color:#ff4444;
+              text-shadow:0 0 20px rgba(255,0,0,0.8),0 0 60px rgba(255,0,0,0.4),0 2px 4px rgba(0,0,0,0.8);
+              white-space:nowrap;
+            `;
+            killOverlay.appendChild(killText);
             document.getElementById('ui-overlay')?.appendChild(killOverlay);
             requestAnimationFrame(() => { killOverlay.style.opacity = '0'; });
             setTimeout(() => killOverlay.remove(), 4000);
