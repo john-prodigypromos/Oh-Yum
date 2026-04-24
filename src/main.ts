@@ -374,6 +374,22 @@ function showLevelIntroOverlay(): void {
 
   panel.appendChild(villainRow);
 
+  // Black hole warning on Level 3
+  if (level.level === 3) {
+    const warning = document.createElement('div');
+    warning.style.cssText = `
+      margin-top:clamp(12px,2vh,24px);padding:10px 24px;
+      font-family:var(--font-display);font-size:clamp(14px,3vw,18px);font-weight:700;
+      letter-spacing:3px;color:#ff6644;
+      text-shadow:0 0 12px rgba(255,80,30,0.6),0 0 30px rgba(255,50,0,0.3);
+      border:1px solid rgba(255,80,30,0.3);border-radius:6px;
+      background:rgba(60,10,0,0.3);backdrop-filter:blur(4px);
+      opacity:0;animation:fadeIn 0.6s 1.2s forwards;
+    `;
+    warning.textContent = '⚠ Watch out for the BLACK HOLE!';
+    panel.appendChild(warning);
+  }
+
   // Inject animations
   if (!document.getElementById('level-intro-css')) {
     const style = document.createElement('style');

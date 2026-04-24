@@ -268,25 +268,25 @@ interface PlanetProfile {
 
 const PLANET_PROFILES: PlanetProfile[] = [
   // 0: Venus — warm brown gas giant (original, loads real texture)
-  { name: 'venus', radius: 300, color: 0x886644, emissive: 0x221100,
+  { name: 'venus', radius: 600, color: 0x886644, emissive: 0x221100,
     atmosColor: 0xcc8844, atmosOpacity: 0.035, metalness: 0.05, roughness: 0.85,
-    position: [800, -300, -1200], textureSeed: 100, textureType: 'venus' },
+    position: [2200, -800, -3200], textureSeed: 100, textureType: 'venus' },
   // 1: Ice giant — pale blue-white with wispy cloud bands
-  { name: 'ice', radius: 260, color: 0x8899bb, emissive: 0x0a1520,
+  { name: 'ice', radius: 520, color: 0x8899bb, emissive: 0x0a1520,
     atmosColor: 0x6688cc, atmosOpacity: 0.05, metalness: 0.03, roughness: 0.7,
-    position: [800, -300, -1200], textureSeed: 201, textureType: 'ice' },
+    position: [2200, -800, -3200], textureSeed: 201, textureType: 'ice' },
   // 2: Red desert — rust-orange Mars-like with dark highlands
-  { name: 'desert', radius: 220, color: 0x994422, emissive: 0x1a0800,
+  { name: 'desert', radius: 440, color: 0x994422, emissive: 0x1a0800,
     atmosColor: 0xcc6633, atmosOpacity: 0.025, metalness: 0.08, roughness: 0.9,
-    position: [800, -300, -1200], textureSeed: 302, textureType: 'desert' },
+    position: [2200, -800, -3200], textureSeed: 302, textureType: 'desert' },
   // 3: Ocean world — deep blue with green-brown landmasses and white clouds
-  { name: 'ocean', radius: 280, color: 0x224488, emissive: 0x040810,
+  { name: 'ocean', radius: 560, color: 0x224488, emissive: 0x040810,
     atmosColor: 0x88bbff, atmosOpacity: 0.045, metalness: 0.04, roughness: 0.6,
-    position: [800, -300, -1200], textureSeed: 403, textureType: 'ocean' },
+    position: [2200, -800, -3200], textureSeed: 403, textureType: 'ocean' },
   // 4: Gas giant — banded amber/cream Jupiter-like with storm spots
-  { name: 'gas', radius: 380, color: 0xaa8855, emissive: 0x181008,
+  { name: 'gas', radius: 750, color: 0xaa8855, emissive: 0x181008,
     atmosColor: 0xddaa66, atmosOpacity: 0.04, metalness: 0.02, roughness: 0.75,
-    position: [800, -300, -1200], textureSeed: 504, textureType: 'gas' },
+    position: [2200, -800, -3200], textureSeed: 504, textureType: 'gas' },
 ];
 
 /** Procedural planet surface texture on canvas. */
@@ -645,7 +645,7 @@ export function createMoon(scene: THREE.Scene): THREE.Group {
   group.add(new THREE.Mesh(moonGeo, moonMat));
 
   // Position far from the planet — moons orbit at great distance
-  group.position.set(-1800, 500, -2800);
+  group.position.set(-3500, 900, -4500);
 
   scene.add(group);
   return group;

@@ -195,87 +195,105 @@ export class SoundSystem {
     if (!ctx || !this.masterGain) return;
     const now = ctx.currentTime;
 
-    // Layer 1: Initial transient crack — sharp attack, short noise burst
-    const crackSize = ctx.sampleRate * 0.05;
+    // Layer 1: Initial transient crack — sharp attack, loud noise burst
+    const crackSize = ctx.sampleRate * 0.08;
     const crackBuf = ctx.createBuffer(1, crackSize, ctx.sampleRate);
     const crackData = crackBuf.getChannelData(0);
     for (let i = 0; i < crackSize; i++) {
-      crackData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / crackSize, 3);
+      crackData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / crackSize, 2.5);
     }
     const crack = ctx.createBufferSource();
     crack.buffer = crackBuf;
     const crackGain = ctx.createGain();
-    const crackFilter = this.lpf(ctx, 2000);
-    crackGain.gain.setValueAtTime(0.4, now);
-    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
+    const crackFilter = this.lpf(ctx, 3000);
+    crackGain.gain.setValueAtTime(0.7, now);
+    crackGain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
     crack.connect(crackFilter);
     crackFilter.connect(crackGain);
     crackGain.connect(this.masterGain);
     crack.start(now);
 
-    // Layer 2: Heavy bass thud — the "boom" body
+    // Layer 2: Heavy bass thud — massive "boom" body
     const sub = ctx.createOscillator();
     const subGain = ctx.createGain();
     sub.type = 'sine';
-    sub.frequency.setValueAtTime(80, now);
-    sub.frequency.exponentialRampToValueAtTime(12, now + 1.0);
-    subGain.gain.setValueAtTime(0.6, now);
-    subGain.gain.setValueAtTime(0.5, now + 0.05);
-    subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+    sub.frequency.setValueAtTime(90, now);
+    sub.frequency.exponentialRampToValueAtTime(10, now + 1.5);
+    subGain.gain.setValueAtTime(0.8, now);
+    subGain.gain.setValueAtTime(0.7, now + 0.05);
+    subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
     sub.connect(subGain);
     subGain.connect(this.masterGain);
     sub.start(now);
-    sub.stop(now + 1.0);
+    sub.stop(now + 1.5);
 
     // Layer 3: Rumbling debris noise — long, filtered, decaying
-    const rumbleSize = ctx.sampleRate * 1.5;
+    const rumbleSize = ctx.sampleRate * 2.0;
     const rumbleBuf = ctx.createBuffer(1, rumbleSize, ctx.sampleRate);
     const rumbleData = rumbleBuf.getChannelData(0);
     for (let i = 0; i < rumbleSize; i++) {
-      rumbleData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / rumbleSize, 2);
+      rumbleData[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / rumbleSize, 1.5);
     }
     const rumble = ctx.createBufferSource();
     rumble.buffer = rumbleBuf;
-    const rumbleFilter = this.lpf(ctx, 500);
-    rumbleFilter.frequency.setValueAtTime(500, now);
-    rumbleFilter.frequency.exponentialRampToValueAtTime(60, now + 1.2);
+    const rumbleFilter = this.lpf(ctx, 800);
+    rumbleFilter.frequency.setValueAtTime(800, now);
+    rumbleFilter.frequency.exponentialRampToValueAtTime(40, now + 1.8);
     const rumbleGain = ctx.createGain();
     rumbleGain.gain.setValueAtTime(0.001, now);
-    rumbleGain.gain.linearRampToValueAtTime(0.3, now + 0.02);
-    rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + 1.5);
+    rumbleGain.gain.linearRampToValueAtTime(0.45, now + 0.02);
+    rumbleGain.gain.exponentialRampToValueAtTime(0.001, now + 2.0);
     rumble.connect(rumbleFilter);
     rumbleFilter.connect(rumbleGain);
     rumbleGain.connect(this.masterGain);
     rumble.start(now);
 
-    // Layer 4: Mid-frequency growl — adds texture between bass and noise
+    // Layer 4: Mid-frequency growl — distorted for aggression
     const mid = ctx.createOscillator();
     const midGain = ctx.createGain();
-    const midFilter = this.lpf(ctx, 400);
+    const midFilter = this.lpf(ctx, 600);
+    const midDist = ctx.createWaveShaper();
+    const midCurve = new Float32Array(256);
+    for (let i = 0; i < 256; i++) { midCurve[i] = Math.tanh(((i / 128) - 1) * 3); }
+    midDist.curve = midCurve;
     mid.type = 'sawtooth';
-    mid.frequency.setValueAtTime(150, now);
-    mid.frequency.exponentialRampToValueAtTime(25, now + 0.7);
-    midGain.gain.setValueAtTime(0.2, now);
-    midGain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
-    mid.connect(midFilter);
+    mid.frequency.setValueAtTime(180, now);
+    mid.frequency.exponentialRampToValueAtTime(20, now + 1.0);
+    midGain.gain.setValueAtTime(0.3, now);
+    midGain.gain.exponentialRampToValueAtTime(0.001, now + 1.0);
+    mid.connect(midDist);
+    midDist.connect(midFilter);
     midFilter.connect(midGain);
     midGain.connect(this.masterGain);
     mid.start(now);
-    mid.stop(now + 0.7);
+    mid.stop(now + 1.0);
 
-    // Layer 5: Secondary delayed thump — "echo" of the explosion
+    // Layer 5: Secondary delayed thump — heavy "echo" of the explosion
     const sub2 = ctx.createOscillator();
     const sub2Gain = ctx.createGain();
     sub2.type = 'sine';
-    sub2.frequency.setValueAtTime(50, now + 0.08);
-    sub2.frequency.exponentialRampToValueAtTime(10, now + 0.8);
+    sub2.frequency.setValueAtTime(60, now + 0.08);
+    sub2.frequency.exponentialRampToValueAtTime(8, now + 1.2);
     sub2Gain.gain.setValueAtTime(0.001, now);
-    sub2Gain.gain.linearRampToValueAtTime(0.35, now + 0.1);
-    sub2Gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+    sub2Gain.gain.linearRampToValueAtTime(0.5, now + 0.1);
+    sub2Gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
     sub2.connect(sub2Gain);
     sub2Gain.connect(this.masterGain);
     sub2.start(now);
-    sub2.stop(now + 0.8);
+    sub2.stop(now + 1.2);
+
+    // Layer 6: Pressure wave — very low sub-bass punch felt more than heard
+    const pressure = ctx.createOscillator();
+    const pressureGain = ctx.createGain();
+    pressure.type = 'sine';
+    pressure.frequency.setValueAtTime(25, now);
+    pressure.frequency.exponentialRampToValueAtTime(8, now + 0.8);
+    pressureGain.gain.setValueAtTime(0.6, now);
+    pressureGain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+    pressure.connect(pressureGain);
+    pressureGain.connect(this.masterGain);
+    pressure.start(now);
+    pressure.stop(now + 0.8);
   }
 
   // ── Wall bounce: short bass thunk ──
@@ -421,18 +439,32 @@ export class SoundSystem {
       this.musicElement.volume = 1.0;
       this.musicElement.preload = 'auto';
       this.musicElement.setAttribute('playsinline', ''); // iOS: don't fullscreen
-      const canPlayOgg = this.musicElement.canPlayType('audio/ogg; codecs="vorbis"');
-      this.musicElement.src = canPlayOgg ? '/audio/cyberpunk_battle.ogg' : '/audio/battle_loop.mp3';
+      this.musicElement.src = '/audio/dark_future.mp3';
       this.musicElement.load(); // force preload on iOS
     }
 
-    // Route through Web Audio API for gain control (only once per element)
+    // Route through Web Audio API for gain control + bass boost (only once per element)
     if (!this.musicSourceCreated) {
       this.musicSourceCreated = true;
       this.musicSource = ctx.createMediaElementSource(this.musicElement);
+
+      // Bass boost — adds weight and darkness
+      const bassBoost = ctx.createBiquadFilter();
+      bassBoost.type = 'lowshelf';
+      bassBoost.frequency.value = 200;
+      bassBoost.gain.value = 6;
+
+      // Gentle high-cut to tame brightness
+      const darkener = ctx.createBiquadFilter();
+      darkener.type = 'lowpass';
+      darkener.frequency.value = 4000;
+      darkener.Q.value = 0.7;
+
       this.musicGainNode = ctx.createGain();
       this.musicGainNode.gain.value = 0.35;
-      this.musicSource.connect(this.musicGainNode);
+      this.musicSource.connect(bassBoost);
+      bassBoost.connect(darkener);
+      darkener.connect(this.musicGainNode);
       this.musicGainNode.connect(this.masterGain);
     }
 
