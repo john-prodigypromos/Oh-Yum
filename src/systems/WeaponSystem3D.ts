@@ -42,9 +42,16 @@ export function tryFireWeapon(
     _offset.copy(localOffset).applyQuaternion(ship.group.quaternion);
     const spawnPos = ship.position.clone().add(_offset);
 
-    // Aim at target if provided, otherwise fire forward
+    // Aim at target with lead-pursuit prediction, otherwise fire forward
     if (target && target.alive) {
-      _dir.subVectors(target.position, spawnPos).normalize();
+      // Lead-pursuit: predict where target will be when bolt arrives
+      const dist = spawnPos.distanceTo(target.position);
+      const travelTime = dist / WEAPONS.BLASTER_BOLT_SPEED;
+      // Aim at predicted future position
+      _dir.copy(target.position)
+        .addScaledVector(target.velocity, travelTime * 0.7) // 70% lead — slight under-lead feels better
+        .sub(spawnPos)
+        .normalize();
     } else {
       _dir.copy(ship.getForward());
     }

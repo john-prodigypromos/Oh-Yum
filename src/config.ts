@@ -24,10 +24,10 @@ export const PHYSICS = {
 
 export const WEAPONS = {
   BLASTER_FIRE_RATE: 60,  // rapid fire — near-continuous stream
-  BLASTER_BOLT_SPEED: 500,  // fast enough to hit moving enemies
+  BLASTER_BOLT_SPEED: 650,  // fast bolts close the gap before target moves
   BLASTER_DAMAGE: 10,  // enemies die in ~5-8 hits depending on difficulty
   BLASTER_BOLT_LIFETIME: 2000,
-  BLASTER_SPREAD: 2,  // tight spread for accurate aiming
+  BLASTER_SPREAD: 0.5,  // near-pinpoint accuracy when locked
 } as const;
 
 export const SHIP = {
@@ -37,7 +37,7 @@ export const SHIP = {
   SHIELD_REGEN_RATE: 4,
   IFRAMES: 150,  // short i-frames so rapid fire works
   KNOCKBACK_FORCE: 200,
-  HITBOX_RADIUS: 20,  // very generous — ensures fast bolts register
+  HITBOX_RADIUS: 25,  // generous — ensures locked bolts register reliably
 } as const;
 
 export const AI = {
