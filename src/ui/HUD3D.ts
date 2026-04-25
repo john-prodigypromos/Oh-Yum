@@ -640,7 +640,7 @@ export class HUD3D {
       const portraitFile = ENEMY_PORTRAITS[idx];
       if (portraitFile) {
         portrait = document.createElement('img');
-        portrait.src = `/portraits/${portraitFile}`;
+        portrait.src = `/portraits/${portraitFile}?v=3`;
         portrait.style.cssText = 'object-fit:cover;border-radius:50%;display:none;margin:2px auto 0;';
         outer.appendChild(portrait);
       }
@@ -853,7 +853,7 @@ export class HUD3D {
       // Update portrait src if enemy changed
       const portraitFile = ENEMY_PORTRAITS[lockedTargetIndex];
       if (this.lockedEnemyIdx !== lockedTargetIndex && portraitFile) {
-        this.lockPortrait.src = `/portraits/${portraitFile}`;
+        this.lockPortrait.src = `/portraits/${portraitFile}?v=3`;
         this.lockedEnemyIdx = lockedTargetIndex;
       }
 

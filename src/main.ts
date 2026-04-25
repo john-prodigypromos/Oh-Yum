@@ -352,7 +352,7 @@ function showLevelIntroOverlay(): void {
 
     // Portrait
     const img = document.createElement('img');
-    img.src = `/portraits/${villain.portrait}?v=2`;
+    img.src = `/portraits/${villain.portrait}?v=3`;
     img.alt = villain.name;
     img.loading = 'eager';
     img.className = 'portrait-villain';

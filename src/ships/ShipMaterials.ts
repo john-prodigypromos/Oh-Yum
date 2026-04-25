@@ -155,18 +155,18 @@ function createBrushedMetalMap(size: number, seed: number): THREE.CanvasTexture 
  *  shader-compile + per-pixel savings. The ship reads as "dark grey armored
  *  fighter" visually, just without the showroom-car gloss. */
 export function createEnemyMaterials(): ShipMaterialSet {
-  // Main hull — Pantone Warm Grey 3C, no textures, no clearcoat
+  // Main hull — Pantone Warm Grey 4C, no textures, no clearcoat
   const hull = new THREE.MeshLambertMaterial({
-    color: 0xc7b9ab,
-    emissive: 0x251f1a,
+    color: 0xb7b09c,
+    emissive: 0x221d18,
     emissiveIntensity: 0.15,
     side: THREE.DoubleSide,
   });
 
-  // Armor panels — darker warm grey
+  // Armor panels — darker warm grey, scaled to match new hull
   const armorDark = new THREE.MeshLambertMaterial({
-    color: 0x8a7e74,
-    emissive: 0x1d1815,
+    color: 0x7f786a,
+    emissive: 0x1a1614,
     emissiveIntensity: 0.1,
   });
 

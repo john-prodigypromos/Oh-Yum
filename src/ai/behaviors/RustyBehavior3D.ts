@@ -8,6 +8,7 @@ import { Ship3D } from '../../entities/Ship3D';
 import type { AIBehavior3D, AIConfig } from '../AIBehavior3D';
 import type { ShipInput } from '../../systems/PhysicsSystem3D';
 import { steerToward, steerAway, leadIntercept, chaos } from '../Steering';
+import { WEAPONS } from '../../config';
 
 let enemyIndex = 0;
 
@@ -128,8 +129,8 @@ export class RustyBehavior3D implements AIBehavior3D {
         yaw = steer.yaw;
         pitch = steer.pitch;
         thrust = facing > 0.3 ? 1.0 : 0.5;
-        // Opportunistic fire while closing
-        if (dist < engageRange * 1.3 && facing > this.cfg.fireCone) {
+        // Harassment fire while closing — anywhere within player's lock range
+        if (dist < WEAPONS.LOCK_RANGE && facing > this.cfg.fireCone) {
           if (now - self.lastFireTime >= this.fireRate) fire = true;
         }
         break;

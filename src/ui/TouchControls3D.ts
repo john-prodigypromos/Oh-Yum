@@ -157,7 +157,7 @@ export class TouchControls3D {
       }
     }, { passive: false });
 
-    this.canvas.addEventListener('touchend', (e) => {
+    const handleTouchRelease = (e: TouchEvent) => {
       for (const touch of Array.from(e.changedTouches)) {
         if (touch.identifier === this.joystickPointerID) {
           this.joystickPointerID = null;
@@ -175,6 +175,25 @@ export class TouchControls3D {
       this.reversePressed = active.some(t =>
         this.dist(t.clientX, t.clientY, this.reverseCenter.x, this.reverseCenter.y) < this.reverseRadius * 1.5
       );
+    };
+    this.canvas.addEventListener('touchend', handleTouchRelease);
+    // touchcancel fires when iOS interrupts a touch (system gesture, notification,
+    // app switcher, etc). Without this handler the joystick would remain "stuck"
+    // and the ship would spin until the user reapplied a touch to clear it.
+    this.canvas.addEventListener('touchcancel', handleTouchRelease);
+
+    // Belt-and-suspenders: zero out joystick on tab/window blur or visibility change.
+    // Covers cases where the cancel event itself doesn't fire (rare browser bugs).
+    const releaseAll = () => {
+      this.joystickPointerID = null;
+      this.joystickDelta = { x: 0, y: 0 };
+      this.firePressed = false;
+      this.thrustPressed = false;
+      this.reversePressed = false;
+    };
+    window.addEventListener('blur', releaseAll);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') releaseAll();
     });
   }
 

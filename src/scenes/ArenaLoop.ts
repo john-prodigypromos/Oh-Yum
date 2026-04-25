@@ -524,7 +524,7 @@ export function updateArena(
             `;
             // Portrait image
             const killImg = document.createElement('img');
-            killImg.src = `/portraits/${killFile}?v=2`;
+            killImg.src = `/portraits/${killFile}?v=3`;
             killImg.style.cssText = 'width:100%;height:auto;object-fit:cover;border-radius:50%;aspect-ratio:1;filter:grayscale(0.3) drop-shadow(0 0 40px rgba(255,0,0,0.4));border:3px solid rgba(255,50,0,0.3);';
             killOverlay.appendChild(killImg);
 

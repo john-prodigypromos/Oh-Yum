@@ -7,6 +7,7 @@ import { Ship3D } from '../../entities/Ship3D';
 import type { AIBehavior3D, AIConfig } from '../AIBehavior3D';
 import type { ShipInput } from '../../systems/PhysicsSystem3D';
 import { steerToward, steerAway, leadIntercept, chaos } from '../Steering';
+import { WEAPONS } from '../../config';
 
 type Phase = 'chase' | 'evade';
 type Maneuver = 'wide_orbit' | 'break_turn' | 'climb_roll' | 'throttle_cut';
@@ -75,7 +76,7 @@ export class BoloTieBehavior3D implements AIBehavior3D {
         const steer = steerToward(self, this._interceptPt, sensitivity * 0.9, 0.4);
         yaw = steer.yaw; pitch = steer.pitch;
         thrust = facing > 0.3 ? 0.8 : 0.5;
-        if (dist < engageRange * 1.3 && facing > this.cfg.fireCone) {
+        if (dist < WEAPONS.LOCK_RANGE && facing > this.cfg.fireCone) {
           if (now - self.lastFireTime >= this.fireRate) fire = true;
         }
         break;
@@ -100,7 +101,7 @@ export class BoloTieBehavior3D implements AIBehavior3D {
             yaw = steer.yaw; pitch = steer.pitch;
             thrust = 0.7;
             // Fire while orbiting if aligned
-            if (facing > this.cfg.fireCone && dist < engageRange * 1.5) {
+            if (facing > this.cfg.fireCone && dist < WEAPONS.LOCK_RANGE) {
               if (now - self.lastFireTime >= this.fireRate * 0.8) fire = true;
             }
             break;
@@ -127,7 +128,7 @@ export class BoloTieBehavior3D implements AIBehavior3D {
             break;
         }
         // Opportunistic fire across all evade maneuvers when player drifts into the cone
-        if (this.maneuver !== 'wide_orbit' && facing > this.cfg.fireCone && dist < engageRange * 1.5) {
+        if (this.maneuver !== 'wide_orbit' && facing > this.cfg.fireCone && dist < WEAPONS.LOCK_RANGE) {
           if (now - self.lastFireTime >= this.fireRate) fire = true;
         }
         break;

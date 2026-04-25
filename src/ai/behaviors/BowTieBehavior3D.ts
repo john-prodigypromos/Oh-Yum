@@ -8,6 +8,7 @@ import { Ship3D } from '../../entities/Ship3D';
 import type { AIBehavior3D, AIConfig } from '../AIBehavior3D';
 import type { ShipInput } from '../../systems/PhysicsSystem3D';
 import { steerToward, steerAway, leadIntercept, chaos } from '../Steering';
+import { WEAPONS } from '../../config';
 
 type Phase = 'chase' | 'evade';
 type Maneuver = 'yo_yo' | 'dive_pull' | 'split_s' | 'climb_roll' | 'scissors';
@@ -73,7 +74,7 @@ export class BowTieBehavior3D implements AIBehavior3D {
         const steer = steerToward(self, this._interceptPt, sensitivity * 1.4, 0.5);
         yaw = steer.yaw; pitch = steer.pitch;
         thrust = facing > 0.3 ? 1.0 : 0.5;
-        if (dist < engageRange * 1.3 && facing > this.cfg.fireCone) {
+        if (dist < WEAPONS.LOCK_RANGE && facing > this.cfg.fireCone) {
           if (now - self.lastFireTime >= this.fireRate * 0.6) fire = true;
         }
         break;

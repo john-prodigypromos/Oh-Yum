@@ -34,6 +34,14 @@ export class MouseControls {
         this.yaw = Math.max(-1, Math.min(1, this.yaw));
         this.verticalMove = Math.max(-1, Math.min(1, this.verticalMove));
       });
+      // Hard-reset accumulated input on window blur or visibility change.
+      // Prevents the ship from continuing to spin when focus leaves the page
+      // mid-mousemove (e.g. user alt-tabs while the cursor was moving).
+      const reset = () => { this.yaw = 0; this.verticalMove = 0; };
+      window.addEventListener('blur', reset);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible') reset();
+      });
     }
   }
 

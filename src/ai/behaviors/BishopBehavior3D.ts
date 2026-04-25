@@ -8,6 +8,7 @@ import { Ship3D } from '../../entities/Ship3D';
 import type { AIBehavior3D, AIConfig } from '../AIBehavior3D';
 import type { ShipInput } from '../../systems/PhysicsSystem3D';
 import { steerToward, steerAway, leadIntercept, chaos, jinkOverlay } from '../Steering';
+import { WEAPONS } from '../../config';
 
 type Phase = 'chase' | 'evade';
 type BossPhase = 'phase1' | 'phase2' | 'phase3';
@@ -98,7 +99,7 @@ export class BishopBehavior3D implements AIBehavior3D {
         yaw += jink.yaw;
         pitch += jink.pitch;
 
-        if (dist < engageRange * 1.3 && facing > this.cfg.fireCone) {
+        if (dist < WEAPONS.LOCK_RANGE && facing > this.cfg.fireCone) {
           if (now - self.lastFireTime >= this.fireRate * fireRateMult) fire = true;
         }
         break;
@@ -117,7 +118,7 @@ export class BishopBehavior3D implements AIBehavior3D {
             pitch = Math.cos(t * spiralRate) * I * 0.6;
             thrust = 0.9;
             // Occasional shots during spiral if aligned
-            if (facing > this.cfg.fireCone && dist < engageRange) {
+            if (facing > this.cfg.fireCone && dist < WEAPONS.LOCK_RANGE) {
               if (now - self.lastFireTime >= this.fireRate * fireRateMult) fire = true;
             }
             break;
