@@ -268,25 +268,25 @@ interface PlanetProfile {
 
 const PLANET_PROFILES: PlanetProfile[] = [
   // 0: Venus — warm brown gas giant (original, loads real texture)
-  { name: 'venus', radius: 600, color: 0x886644, emissive: 0x221100,
+  { name: 'venus', radius: 960, color: 0x886644, emissive: 0x221100,
     atmosColor: 0xcc8844, atmosOpacity: 0.035, metalness: 0.05, roughness: 0.85,
-    position: [2200, -800, -3200], textureSeed: 100, textureType: 'venus' },
+    position: [3500, -1200, -5100], textureSeed: 100, textureType: 'venus' },
   // 1: Ice giant — pale blue-white with wispy cloud bands
-  { name: 'ice', radius: 520, color: 0x8899bb, emissive: 0x0a1520,
+  { name: 'ice', radius: 832, color: 0x8899bb, emissive: 0x0a1520,
     atmosColor: 0x6688cc, atmosOpacity: 0.05, metalness: 0.03, roughness: 0.7,
-    position: [2200, -800, -3200], textureSeed: 201, textureType: 'ice' },
+    position: [3500, -1200, -5100], textureSeed: 201, textureType: 'ice' },
   // 2: Red desert — rust-orange Mars-like with dark highlands
-  { name: 'desert', radius: 440, color: 0x994422, emissive: 0x1a0800,
+  { name: 'desert', radius: 704, color: 0x994422, emissive: 0x1a0800,
     atmosColor: 0xcc6633, atmosOpacity: 0.025, metalness: 0.08, roughness: 0.9,
-    position: [2200, -800, -3200], textureSeed: 302, textureType: 'desert' },
+    position: [3500, -1200, -5100], textureSeed: 302, textureType: 'desert' },
   // 3: Ocean world — deep blue with green-brown landmasses and white clouds
-  { name: 'ocean', radius: 560, color: 0x224488, emissive: 0x040810,
+  { name: 'ocean', radius: 896, color: 0x224488, emissive: 0x040810,
     atmosColor: 0x88bbff, atmosOpacity: 0.045, metalness: 0.04, roughness: 0.6,
-    position: [2200, -800, -3200], textureSeed: 403, textureType: 'ocean' },
+    position: [3500, -1200, -5100], textureSeed: 403, textureType: 'ocean' },
   // 4: Gas giant — banded amber/cream Jupiter-like with storm spots
-  { name: 'gas', radius: 750, color: 0xaa8855, emissive: 0x181008,
+  { name: 'gas', radius: 1200, color: 0xaa8855, emissive: 0x181008,
     atmosColor: 0xddaa66, atmosOpacity: 0.04, metalness: 0.02, roughness: 0.75,
-    position: [2200, -800, -3200], textureSeed: 504, textureType: 'gas' },
+    position: [3500, -1200, -5100], textureSeed: 504, textureType: 'gas' },
 ];
 
 /** Procedural planet surface texture on canvas. */
@@ -529,7 +529,7 @@ function createPlanetBumpMap(seed: number): THREE.CanvasTexture {
   ctx.fillRect(0, 0, W, H);
 
   // Large terrain features
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < 90; i++) {
     const cx = rng() * W, cy = rng() * H, cr = 30 + rng() * 150;
     const bright = 100 + Math.floor(rng() * 60);
     const g = ctx.createRadialGradient(cx, cy, cr * 0.1, cx, cy, cr);
@@ -540,7 +540,7 @@ function createPlanetBumpMap(seed: number): THREE.CanvasTexture {
   }
 
   // Fine noise detail
-  for (let i = 0; i < 3000; i++) {
+  for (let i = 0; i < 4500; i++) {
     const x = rng() * W, y = rng() * H;
     const s = 1 + rng() * 4;
     const bright = 90 + Math.floor(rng() * 80);
@@ -549,7 +549,7 @@ function createPlanetBumpMap(seed: number): THREE.CanvasTexture {
   }
 
   // Crater rims — bright ring with dark center
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 30; i++) {
     const cx = rng() * W, cy = rng() * H, cr = 5 + rng() * 30;
     ctx.strokeStyle = `rgba(180, 180, 180, ${0.15 + rng() * 0.2})`;
     ctx.lineWidth = 2;
@@ -572,7 +572,7 @@ export function createPlanet(scene: THREE.Scene, profileIndex = 0): THREE.Group 
   const prof = PLANET_PROFILES[profileIndex % PLANET_PROFILES.length];
   const group = new THREE.Group();
 
-  const planetGeo = new THREE.SphereGeometry(prof.radius, 192, 128);
+  const planetGeo = new THREE.SphereGeometry(prof.radius, 288, 192);
   const planetMat = new THREE.MeshStandardMaterial({
     color: prof.color,
     metalness: prof.metalness,
@@ -607,7 +607,7 @@ export function createPlanet(scene: THREE.Scene, profileIndex = 0): THREE.Group 
   group.add(planet);
 
   // Inner atmosphere — subtle haze
-  const atmos1Geo = new THREE.SphereGeometry(prof.radius * 1.02, 64, 48);
+  const atmos1Geo = new THREE.SphereGeometry(prof.radius * 1.02, 96, 72);
   const atmos1Mat = new THREE.MeshBasicMaterial({
     color: prof.atmosColor,
     transparent: true,
@@ -617,7 +617,7 @@ export function createPlanet(scene: THREE.Scene, profileIndex = 0): THREE.Group 
   group.add(new THREE.Mesh(atmos1Geo, atmos1Mat));
 
   // Outer atmosphere glow — larger, softer
-  const atmos2Geo = new THREE.SphereGeometry(prof.radius * 1.06, 48, 32);
+  const atmos2Geo = new THREE.SphereGeometry(prof.radius * 1.06, 72, 48);
   const atmos2Mat = new THREE.MeshBasicMaterial({
     color: prof.atmosColor,
     transparent: true,
@@ -661,7 +661,7 @@ export function createMoon(scene: THREE.Scene): THREE.Group {
   ctx.fillRect(0, 0, W, H);
 
   // Crater features — dark circular shadows
-  for (let i = 0; i < 25; i++) {
+  for (let i = 0; i < 38; i++) {
     const cx = rng() * W;
     const cy = rng() * H;
     const cr = 4 + rng() * 20;
@@ -678,7 +678,7 @@ export function createMoon(scene: THREE.Scene): THREE.Group {
   // Ice fracture lines
   ctx.strokeStyle = 'rgba(160, 200, 220, 0.15)';
   ctx.lineWidth = 1;
-  for (let i = 0; i < 15; i++) {
+  for (let i = 0; i < 23; i++) {
     ctx.beginPath();
     ctx.moveTo(rng() * W, rng() * H);
     for (let j = 0; j < 4; j++) {
@@ -691,7 +691,7 @@ export function createMoon(scene: THREE.Scene): THREE.Group {
   moonFallback.wrapS = THREE.RepeatWrapping;
   moonFallback.anisotropy = 4;
 
-  const moonGeo = new THREE.SphereGeometry(22, 64, 48);
+  const moonGeo = new THREE.SphereGeometry(35, 96, 72);
   const moonMat = new THREE.MeshStandardMaterial({
     map: moonFallback,
     metalness: 0.1,
@@ -709,7 +709,7 @@ export function createMoon(scene: THREE.Scene): THREE.Group {
   group.add(new THREE.Mesh(moonGeo, moonMat));
 
   // Position far from the planet — moons orbit at great distance
-  group.position.set(-3500, 900, -4500);
+  group.position.set(-6500, 1700, -7500);
 
   scene.add(group);
   return group;
@@ -742,7 +742,7 @@ export function createSpaceEnvironment(
   const planet = createPlanet(scene, planetIndex);
   const planetRadius = PLANET_PROFILES[planetIndex % PLANET_PROFILES.length].radius;
   const moon = createMoon(scene);
-  const moonRadius = 22;
+  const moonRadius = 35;
 
   // Generate environment map for PBR reflections
   createEnvironmentMap(renderer, scene, camera);

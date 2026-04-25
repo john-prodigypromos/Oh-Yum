@@ -503,6 +503,7 @@ export function updateArena(
           const killFile = killPortraitFiles[killIdx];
           if (killFile) {
             const killOverlay = document.createElement('div');
+            killOverlay.className = 'kill-overlay';
             killOverlay.style.cssText = `
               position:fixed;top:40px;left:50%;transform:translateX(-50%);
               width:min(450px,70vw);pointer-events:none;z-index:35;
@@ -517,6 +518,7 @@ export function updateArena(
             // ELIMINATED text over portrait
             const killText = document.createElement('div');
             killText.textContent = 'ELIMINATED';
+            killText.className = 'kill-overlay-text';
             killText.style.cssText = `
               position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
               font-family:var(--font-display);font-size:clamp(28px,6vw,48px);font-weight:900;
