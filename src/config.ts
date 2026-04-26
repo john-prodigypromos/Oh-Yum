@@ -13,10 +13,10 @@ export const ARENA = {
 
 export const PHYSICS = {
   FIXED_TIMESTEP: 1000 / 60,
-  THRUST: 120,  // strong acceleration for decisive movement
+  THRUST: 180,  // strong acceleration — thrust feels decisive when chasing/escaping
   ROTATION_SPEED: Math.PI * 0.9,  // balanced — player smooth, enemies use rotationMult
   DRAG_HALF_LIFE: 3.0,  // ships maintain momentum — less floaty deceleration
-  MAX_VELOCITY: 150,  // high enough for fast arcs
+  MAX_VELOCITY: 200,  // raised from 150 so player can outrun BEGINNER and match harder enemies
   WALL_BOUNCE_FACTOR: 0.6,
   WALL_DAMAGE: 2,
   COLLISION_DAMAGE_MULTIPLIER: 0.1,
