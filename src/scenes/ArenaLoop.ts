@@ -114,7 +114,9 @@ export function createArenaState(
     group: playerGeo,
     maxHull: diff.playerHull,
     maxShield: diff.playerShield,
-    speedMult: 1.0,
+    // Player speed boost — lets the player run down enemies whose
+    // speedMult ranges 1.0 (beginner) to 1.20 (expert).
+    speedMult: 1.4,
     rotationMult: 1.0,
     isPlayer: true,
   });
